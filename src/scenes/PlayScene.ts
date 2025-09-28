@@ -64,9 +64,11 @@ export class PlayScene extends Phaser.Scene {
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
     const spawn = (x:number,y:number,id: Item['id']) => {
-      const c = this.add.circle(x,y,8,0x7cc7a1); const t = this.add.text(x-12,y-20,id,{fontSize:'10px'});
-      const container = this.add.container(0,0,[c,t]);
+      const circle = this.add.circle(0,0,8,0x7cc7a1);
+      const label = this.add.text(0,-18,id,{fontSize:'10px'}).setOrigin(0.5,1);
+      const container = this.add.container(x,y,[circle,label]);
       this.physics.add.existing(container, true);
+      this.configureItemBody(container);
       (container as any).itemId = id;
       this.itemsGroup.add(container as any);
     };
@@ -109,8 +111,11 @@ export class PlayScene extends Phaser.Scene {
   drop(slot: 0|1) {
     const it = this.inv[slot]; if (!it) return;
     this.inv[slot] = null;
-    const container = this.add.container(0,0,[this.add.circle(this.player.x+14,this.player.y+14,8,0x7cc7a1), this.add.text(this.player.x,this.player.y,it.id,{fontSize:'10px'})]);
+    const circle = this.add.circle(0,0,8,0x7cc7a1);
+    const label = this.add.text(0,-18,it.id,{fontSize:'10px'}).setOrigin(0.5,1);
+    const container = this.add.container(this.player.x+14,this.player.y+14,[circle,label]);
     this.physics.add.existing(container, true);
+    this.configureItemBody(container);
     (container as any).itemId = it.id;
     this.itemsGroup.add(container as any);
   }
@@ -167,10 +172,19 @@ export class PlayScene extends Phaser.Scene {
     const other = slot === 0 ? 1 : 0;
     if (!this.inv[other]) { this.inv[other] = { id: 'bottle', label: 'Empty Bottle', uses: 1 }; return; }
     // drop
-    const container = this.add.container(0,0,[this.add.circle(this.player.x+8,this.player.y+8,8,0x7cc7a1), this.add.text(this.player.x-12,this.player.y-20,'bottle',{fontSize:'10px'})]);
+    const circle = this.add.circle(0,0,8,0x7cc7a1);
+    const label = this.add.text(0,-18,'bottle',{fontSize:'10px'}).setOrigin(0.5,1);
+    const container = this.add.container(this.player.x+8,this.player.y+8,[circle,label]);
     this.physics.add.existing(container, true);
+    this.configureItemBody(container);
     (container as any).itemId = 'bottle';
     this.itemsGroup.add(container as any);
+  }
+
+  private configureItemBody(container: Phaser.GameObjects.Container) {
+    const body = container.body as Phaser.Physics.Arcade.StaticBody;
+    body.setSize(16, 16).setOffset(-8, -8);
+    body.updateFromGameObject();
   }
 
   damagePlayer(n: number) {
@@ -199,6 +213,11 @@ export class PlayScene extends Phaser.Scene {
     if (this.cursors.right?.isDown) body.setVelocityX(speed);
     if (this.cursors.up?.isDown) body.setVelocityY(-speed);
     if (this.cursors.down?.isDown) body.setVelocityY(speed);
+
+    const overItem: Phaser.GameObjects.Container | null = (this as any)._overItem || null;
+    if (overItem && (!overItem.active || !this.physics.overlap(this.player, overItem as any))) {
+      (this as any)._overItem = null;
+    }
 
     // interaction
     if (Phaser.Input.Keyboard.JustDown(this.keyPick)) this.tryPickup();
