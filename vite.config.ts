@@ -1,14 +1,15 @@
-import path from 'node:path';
+import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 
-// If your repo is named something else, set base to "/<repo-name>/".
+const base = process.env.NODE_ENV === 'production' ? '/bedroom-monster/' : '/';
+
 export default defineConfig({
-  base: '/bedroom-monster/',
+  base,
   resolve: {
     alias: {
-      '@game': path.resolve(__dirname, 'src/game'),
-      '@scenes': path.resolve(__dirname, 'src/scenes'),
-      '@ui': path.resolve(__dirname, 'src/ui'),
+      '@game': fileURLToPath(new URL('./src/game', import.meta.url)),
+      '@scenes': fileURLToPath(new URL('./src/scenes', import.meta.url)),
+      '@ui': fileURLToPath(new URL('./src/ui', import.meta.url)),
     },
   },
 });
