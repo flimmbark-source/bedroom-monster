@@ -10,6 +10,9 @@ Enable GitHub Pages → Source: **GitHub Actions**. The Actions workflow in `.gi
 - `npm run build` – build to `dist/`
 - `npm run preview` – serve the build locally
 
+> ℹ️ **Do not open `index.html` directly in the browser.** Browsers cannot execute the TypeScript entry (`src/main.ts`) referenced by the page, so nothing will render.
+> Always run through Vite via `npm run dev` (or `npm run build`/`npm run preview`) so the TypeScript is compiled before loading.
+
 ## Controls
 - Move: Arrow keys
 - Interact: `E` (pickup/swap), `G` (drop slot 1)
