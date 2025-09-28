@@ -174,7 +174,9 @@ export class PlayScene extends Phaser.Scene {
   }
 
   tryMelee(dmg: number, range: number, fire = false) {
+
     this.showMeleeTelegraph(range, fire ? 0xff8844 : 0x6cc4ff, fire ? '🔥' : '🗡️');
+
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
     if (d <= range) {
       this.hitMonster(dmg, fire ? '🔥' : '💥');
@@ -185,7 +187,9 @@ export class PlayScene extends Phaser.Scene {
   throwBottle(dmg: number, fire = false, stun = false) {
     // instant line check for proto
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
+
     this.showThrowTelegraph(360, fire ? 0xff9966 : 0x88d5ff, fire ? '🍷' : (stun ? '💨' : '🍾'), 420);
+
     if (d < 360) {
       this.hitMonster(dmg, fire ? '🔥' : stun ? '💫' : '💥');
       if (stun) this.monster.setVelocity(0,0);
@@ -231,6 +235,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   afterDelay(ms:number, fn:()=>void) { this.time.delayedCall(ms, fn); }
+
 
   private getPlayerFacingAngle() {
     if (!this.monster?.active) return -Math.PI / 2;
@@ -323,15 +328,18 @@ export class PlayScene extends Phaser.Scene {
       duration,
       onUpdate: updatePositions,
       onComplete: () => rect.destroy(),
+
     });
 
     this.tweens.add({
       targets: icon,
+
       alpha: { from: 0.95, to: 0 },
       scale: { from: 0.85, to: 1.2 },
       ease: 'Sine.easeOut',
       duration,
       onUpdate: updatePositions,
+
       onComplete: () => icon.destroy(),
     });
   }
