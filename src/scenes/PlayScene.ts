@@ -22,7 +22,6 @@ export class PlayScene extends Phaser.Scene {
   hud!: HudElements;
   private fxDepth = 200;
   private aimAngle = -Math.PI / 2;
-
   constructor() { super('Play'); }
 
   preload() {
@@ -77,6 +76,7 @@ export class PlayScene extends Phaser.Scene {
     });
 
     // input
+
     this.cursors = this.input.keyboard!.addKeys({
       up: Phaser.Input.Keyboard.KeyCodes.W,
       down: Phaser.Input.Keyboard.KeyCodes.S,
@@ -208,7 +208,6 @@ export class PlayScene extends Phaser.Scene {
     const toTarget = new Phaser.Math.Vector2(this.monster.x - this.player.x, this.monster.y - this.player.y);
     const along = toTarget.dot(aimDir);
     const cross = toTarget.x * aimDir.y - toTarget.y * aimDir.x;
-
     if (along > 0 && along <= range && Math.abs(cross) <= laneHalfWidth) {
       this.hitMonster(dmg, fire ? '🔥' : stun ? '💫' : '💥');
       if (stun) this.monster.setVelocity(0,0);
@@ -255,7 +254,6 @@ export class PlayScene extends Phaser.Scene {
   }
 
   afterDelay(ms:number, fn:()=>void) { this.time.delayedCall(ms, fn); }
-
   private updateAimFromPointer(pointer?: Phaser.Input.Pointer) {
     if (!this.player) return;
     const p = pointer ?? this.input.activePointer;
@@ -267,6 +265,7 @@ export class PlayScene extends Phaser.Scene {
 
   private getAimAngle() {
     return this.aimAngle;
+
   }
 
   private showMeleeTelegraph(range: number, color: number, emoji: string, duration = 300) {
@@ -321,6 +320,7 @@ export class PlayScene extends Phaser.Scene {
       onComplete: () => icon.destroy(),
     });
   }
+
 
   private showThrowTelegraph(range: number, color: number, emoji: string, duration = 420, thickness = 24) {
     const rect = this.add.rectangle(this.player.x, this.player.y, range, thickness, color, 0.2)

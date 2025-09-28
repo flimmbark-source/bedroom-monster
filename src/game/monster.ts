@@ -27,6 +27,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     return this;
   }
 
+
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'monster-circle');
     scene.add.existing(this);
@@ -150,7 +151,9 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
+
     this.showSweepTelegraph(player, 120, 0xffbb55, '🌀', 360);
+
     this.startAction('sweep', [
       {
         duration: 200,
@@ -183,7 +186,9 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     ]);
   }
   smash(player: Phaser.Physics.Arcade.Sprite) {
+
     this.showSmashTelegraph(player, 130, 0xffcc77, '🔨', 380);
+
     this.startAction('smash', [
       {
         duration: 260,
@@ -214,7 +219,9 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     ]);
   }
   rush(player: Phaser.Physics.Arcade.Sprite) {
+
     this.showRushTelegraph(player, 280, 0xeeaa55, '⚡', 360);
+
     this.startAction('rush', [
       {
         duration: 220,
@@ -245,7 +252,9 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     ]);
   }
   roar(player: Phaser.Physics.Arcade.Sprite) {
+
     this.showRoarTelegraph(190, 0xffdd88, '🗯️', 420);
+
     this.startAction('roar', [
       {
         duration: 180,
@@ -348,6 +357,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       .setScale(0.3)
       .setAlpha(0.85);
     const icon = this.scene.add.text(this.x, this.y, emoji, { fontSize: '32px' })
+
       .setOrigin(0.5)
       .setDepth(this.telegraphDepth + 1)
       .setAlpha(0.95);
