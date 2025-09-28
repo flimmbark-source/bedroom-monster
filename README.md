@@ -5,6 +5,7 @@ Top-down survival prototype built with Phaser + TypeScript. **GitHub-only workfl
 Enable GitHub Pages → Source: **GitHub Actions**. The Actions workflow in `.github/workflows/deploy.yml` deploys `dist/`.
 
 ## Scripts
+- Requires **Node.js ≥18**.
 - `npm run dev` – local dev (optional if using Codespaces)
 - `npm run build` – build to `dist/`
 - `npm run preview` – serve the build locally
