@@ -40,6 +40,8 @@ export class PlayScene extends Phaser.Scene {
   }
 
   create() {
+    this.resetPlayerState();
+
     // room bg
     this.add.rectangle(ROOM_W/2, ROOM_H/2, ROOM_W, ROOM_H, 0x161a22).setStrokeStyle(2, 0x2a3242);
 
@@ -302,7 +304,10 @@ export class PlayScene extends Phaser.Scene {
 
   damagePlayer(n: number) {
     this.hp -= n; this.cameras.main.shake(80, 0.004);
-    if (this.hp <= 0) this.scene.restart();
+    if (this.hp <= 0) {
+      this.resetPlayerState();
+      this.scene.restart();
+    }
   }
 
   hitMonster(n: number, emoji: string = '💥') {
@@ -310,7 +315,10 @@ export class PlayScene extends Phaser.Scene {
     this.monster.refreshHpBar();
     this.monster.setTint(0xffdddd); this.time.delayedCall(80, () => this.monster.clearTint());
     this.spawnFloatingEmoji(this.monster.x, this.monster.y - 30, emoji, 26, 0xfff4d3);
-    if (this.monster.hp <= 0) this.scene.restart();
+    if (this.monster.hp <= 0) {
+      this.resetPlayerState();
+      this.scene.restart();
+    }
   }
 
   speedBoost(ms: number) {
@@ -320,18 +328,9 @@ export class PlayScene extends Phaser.Scene {
   }
 
   afterDelay(ms:number, fn:()=>void) { this.time.delayedCall(ms, fn); }
-  private updateAimFromPointer(pointer?: Phaser.Input.Pointer) {
-    if (!this.player) return;
-    const p = pointer ?? this.input.activePointer;
-    if (!p) return;
-    const worldPoint = this.cameras.main.getWorldPoint(p.x, p.y);
-    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, worldPoint.x, worldPoint.y);
-    if (!Number.isNaN(angle)) this.aimAngle = angle;
-  }
 
-  private getAimAngle() {
-    return this.aimAngle;
-
+  private resetPlayerState() {
+    this.hp = PLAYER_BASE.hp;
   }
 
   private showMeleeTelegraph(range: number, color: number, emoji: string, duration = 300) {
@@ -387,68 +386,6 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
-
-  private showThrowTelegraph(range: number, color: number, emoji: string, duration = 420, thickness = 24) {
-    const rect = this.add.rectangle(this.player.x, this.player.y, range, thickness, color, 0.2)
-      .setDepth(this.fxDepth)
-      .setOrigin(0, 0.5)
-      .setAlpha(0.9)
-      .setScale(0.1, 1);
-
-    const icon = this.add.text(this.player.x, this.player.y, emoji, { fontSize: '26px' })
-      .setOrigin(0.5)
-      .setDepth(this.fxDepth + 1)
-      .setAlpha(0.95)
-      .setScale(0.85);
-
-    const updatePositions = () => {
-      const angle = this.getAimAngle();
-      rect.setPosition(this.player.x, this.player.y);
-      rect.setRotation(angle);
-      const tipX = this.player.x + Math.cos(angle) * range;
-      const tipY = this.player.y + Math.sin(angle) * range;
-      if (icon.active) icon.setPosition(tipX, tipY);
-    };
-
-    updatePositions();
-
-    this.tweens.add({
-      targets: rect,
-      scaleX: { from: 0.1, to: 1 },
-      alpha: { from: 0.9, to: 0 },
-      ease: 'Cubic.easeOut',
-      duration,
-      onUpdate: updatePositions,
-      onComplete: () => rect.destroy(),
-    });
-
-    this.tweens.add({
-      targets: icon,
-      alpha: { from: 0.95, to: 0 },
-      scale: { from: 0.85, to: 1.2 },
-      ease: 'Sine.easeOut',
-      duration,
-      onUpdate: updatePositions,
-      onComplete: () => icon.destroy(),
-    });
-  }
-
-  private spawnFloatingEmoji(x: number, y: number, emoji: string, fontSize = 24, tint = 0xffffff, duration = 480) {
-    const label = this.add.text(x, y, emoji, {
-      fontSize: `${fontSize}px`,
-    }).setOrigin(0.5).setDepth(this.fxDepth + 2);
-
-    label.setTint(tint);
-
-    this.tweens.add({
-      targets: label,
-      alpha: { from: 1, to: 0 },
-      y: y - 20,
-      duration,
-      ease: 'Sine.easeOut',
-      onComplete: () => label.destroy(),
-    });
-  }
 
   private updateAimFromPointer(pointer?: Phaser.Input.Pointer) {
     if (!this.player) return;
