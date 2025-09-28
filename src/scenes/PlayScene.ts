@@ -19,8 +19,6 @@ export class PlayScene extends Phaser.Scene {
 
   constructor() { super('Play'); }
 
-  preload() {}
-
   create() {
     // room bg
     this.add.rectangle(ROOM_W/2, ROOM_H/2, ROOM_W, ROOM_H, 0x161a22).setStrokeStyle(2, 0x2a3242);
@@ -39,7 +37,10 @@ export class PlayScene extends Phaser.Scene {
     addBlock(560, 700, 320, 40); // rug edge (as blocker for proto)
 
     // player
-    this.player = this.physics.add.sprite(200, 200, '').setCircle(14).setTint(0x88c0ff);
+    this.player = this.physics.add.sprite(200, 200, '__WHITE');
+    this.player.setDisplaySize(32, 32);
+    this.player.setTintFill(0x88c0ff);
+    this.player.setCircle(14, 2, 2);
     this.player.setCollideWorldBounds(true);
     this.physics.add.collider(this.player, blocks);
 
