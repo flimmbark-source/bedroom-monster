@@ -21,6 +21,7 @@ export class PlayScene extends Phaser.Scene {
   hp = PLAYER_BASE.hp; inv: Inventory = [null, null];
   itemsGroup!: Phaser.Physics.Arcade.StaticGroup;
   hud!: HudElements;
+  private fxDepth = 200;
 
   constructor() { super('Play'); }
 
@@ -61,10 +62,12 @@ export class PlayScene extends Phaser.Scene {
     this.player.setDisplaySize(32, 32);
     this.player.setCircle(14, 2, 2);
     this.player.setCollideWorldBounds(true);
+    this.player.setDepth(10);
     this.physics.add.collider(this.player, blocks);
 
     // monster
     this.monster = new Monster(this, 900, 700);
+    this.monster.setDepth(10);
     this.physics.add.collider(this.monster, blocks);
     this.physics.add.overlap(this.monster, this.player, () => {
       // contact damage once per second (simple throttle)
@@ -171,16 +174,20 @@ export class PlayScene extends Phaser.Scene {
   }
 
   tryMelee(dmg: number, range: number, fire = false) {
+    this.showActionRange(this.player.x, this.player.y, range, fire ? 0xff8844 : 0x6cc4ff, fire ? '🔥' : '🗡️');
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    if (d <= range) this.hitMonster(dmg);
+    if (d <= range) {
+      this.hitMonster(dmg, fire ? '🔥' : '💥');
+    }
     if (fire) {/* could apply DoT in later pass */}
   }
 
   throwBottle(dmg: number, fire = false, stun = false) {
     // instant line check for proto
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
+    this.showActionRange(this.player.x, this.player.y, 360, fire ? 0xff9966 : 0x88d5ff, fire ? '🍷' : (stun ? '💨' : '🍾'), 420);
     if (d < 360) {
-      this.hitMonster(dmg);
+      this.hitMonster(dmg, fire ? '🔥' : stun ? '💫' : '💥');
       if (stun) this.monster.setVelocity(0,0);
     }
   }
@@ -210,18 +217,68 @@ export class PlayScene extends Phaser.Scene {
     if (this.hp <= 0) this.scene.restart();
   }
 
-  hitMonster(n: number) {
+  hitMonster(n: number, emoji: string = '💥') {
     this.monster.hp -= n;
     this.monster.setTint(0xffdddd); this.time.delayedCall(80, () => this.monster.clearTint());
+    this.spawnFloatingEmoji(this.monster.x, this.monster.y - 30, emoji, 26, 0xfff4d3);
     if (this.monster.hp <= 0) this.scene.restart();
   }
 
   speedBoost(ms: number) {
     (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 360;
     this.time.delayedCall(ms, () => (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 260);
+    this.spawnFloatingEmoji(this.player.x, this.player.y - 40, '⚡', 24, 0xe8ff9e, ms);
   }
 
   afterDelay(ms:number, fn:()=>void) { this.time.delayedCall(ms, fn); }
+
+  private showActionRange(x: number, y: number, range: number, color: number, emoji: string, duration = 320) {
+    const circle = this.add.circle(x, y, range, color, 0.18)
+      .setStrokeStyle(2, color)
+      .setDepth(this.fxDepth)
+      .setAlpha(0.7)
+      .setScale(0.25);
+    const icon = this.add.text(x, y - range - 14, emoji, { fontSize: '28px' })
+      .setOrigin(0.5)
+      .setDepth(this.fxDepth + 1)
+      .setAlpha(0.9);
+
+    this.tweens.add({
+      targets: circle,
+      scale: { from: 0.25, to: 1 },
+      alpha: { from: 0.7, to: 0 },
+      ease: 'Sine.easeOut',
+      duration,
+      onComplete: () => circle.destroy(),
+    });
+
+    this.tweens.add({
+      targets: icon,
+      alpha: { from: 0.9, to: 0 },
+      y: icon.y - 16,
+      scale: { from: 0.8, to: 1.2 },
+      ease: 'Sine.easeOut',
+      duration,
+      onComplete: () => icon.destroy(),
+    });
+  }
+
+  private spawnFloatingEmoji(x: number, y: number, emoji: string, fontSize = 24, tint = 0xffffff, duration = 480) {
+    const label = this.add.text(x, y, emoji, {
+      fontSize: `${fontSize}px`,
+    }).setOrigin(0.5).setDepth(this.fxDepth + 2);
+
+    label.setTint(tint);
+
+    this.tweens.add({
+      targets: label,
+      alpha: { from: 1, to: 0 },
+      y: y - 20,
+      duration,
+      ease: 'Sine.easeOut',
+      onComplete: () => label.destroy(),
+    });
+  }
 
   update(time: number, delta: number) {
     // movement

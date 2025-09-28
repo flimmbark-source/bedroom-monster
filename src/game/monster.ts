@@ -14,6 +14,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private actionLock = false;
   private currentChain?: Phaser.Tweens.TweenChain;
   private idleTween?: Phaser.Tweens.Tween;
+  private telegraphDepth = 90;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'monster-circle');
@@ -103,6 +104,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
+    this.showTelegraph(90, 0xffbb55, '🌀', 360);
     this.startAction('sweep', [
       {
         duration: 200,
@@ -121,6 +123,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         onStart: () => {
           if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) < 80) {
             player.emit('hit', { dmg: 1, type: 'sweep' });
+            this.spawnImpactEmoji(player.x, player.y - 20, '💫', 0xffd18a);
           }
         },
       },
@@ -134,6 +137,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     ]);
   }
   smash(player: Phaser.Physics.Arcade.Sprite) {
+    this.showTelegraph(130, 0xffcc77, '🔨', 380);
     this.startAction('smash', [
       {
         duration: 260,
@@ -150,6 +154,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         onStart: () => {
           if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) < 120) {
             player.emit('hit', { dmg: 1, type: 'smash' });
+            this.spawnImpactEmoji(player.x, player.y - 26, '💥', 0xfff2c6);
           }
         },
       },
@@ -163,6 +168,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     ]);
   }
   rush(player: Phaser.Physics.Arcade.Sprite) {
+    this.showTelegraph(160, 0xeeaa55, '⚡', 360);
     this.startAction('rush', [
       {
         duration: 220,
@@ -188,10 +194,12 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         scaleY: this.baseScale.y,
         ease: 'Quad.easeOut',
         onStart: () => this.scene.time.delayedCall(60, () => this.setVelocity(0, 0)),
+        onComplete: () => this.spawnImpactEmoji(this.x, this.y - 28, '💢', 0xffe0b3),
       },
     ]);
   }
   roar(player: Phaser.Physics.Arcade.Sprite) {
+    this.showTelegraph(190, 0xffdd88, '🗯️', 420);
     this.startAction('roar', [
       {
         duration: 180,
@@ -205,7 +213,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         scaleX: 1.15,
         scaleY: 1.15,
         ease: 'Sine.easeInOut',
-        onStart: () => player.emit('hit', { dmg: 0, type: 'roar' }),
+        onStart: () => {
+          player.emit('hit', { dmg: 0, type: 'roar' });
+          this.spawnImpactEmoji(player.x, player.y - 34, '😱', 0xfff2c6);
+        },
       },
       {
         duration: 180,
@@ -215,5 +226,54 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         onStart: () => this.setTint(this.baseTint),
       },
     ]);
+  }
+
+  private showTelegraph(range: number, color: number, emoji: string, duration: number) {
+    const circle = this.scene.add.circle(this.x, this.y, range, color, 0.16)
+      .setStrokeStyle(2, color)
+      .setDepth(this.telegraphDepth)
+      .setAlpha(0.7)
+      .setScale(0.35);
+    const icon = this.scene.add.text(this.x, this.y - range - 16, emoji, { fontSize: '30px' })
+      .setOrigin(0.5)
+      .setDepth(this.telegraphDepth + 1)
+      .setAlpha(0.95);
+
+    this.scene.tweens.add({
+      targets: circle,
+      scale: { from: 0.35, to: 1 },
+      alpha: { from: 0.7, to: 0 },
+      ease: 'Sine.easeOut',
+      duration,
+      onUpdate: () => circle.setPosition(this.x, this.y),
+      onComplete: () => circle.destroy(),
+    });
+
+    this.scene.tweens.add({
+      targets: icon,
+      alpha: { from: 0.95, to: 0 },
+      y: icon.y - 16,
+      scale: { from: 0.85, to: 1.3 },
+      ease: 'Sine.easeOut',
+      duration,
+      onUpdate: () => icon.setPosition(this.x, this.y - range - 16),
+      onComplete: () => icon.destroy(),
+    });
+  }
+
+  private spawnImpactEmoji(x: number, y: number, emoji: string, tint: number) {
+    const icon = this.scene.add.text(x, y, emoji, { fontSize: '26px' })
+      .setOrigin(0.5)
+      .setDepth(this.telegraphDepth + 2);
+    icon.setTint(tint);
+
+    this.scene.tweens.add({
+      targets: icon,
+      alpha: { from: 1, to: 0 },
+      y: y - 18,
+      duration: 420,
+      ease: 'Sine.easeOut',
+      onComplete: () => icon.destroy(),
+    });
   }
 }
