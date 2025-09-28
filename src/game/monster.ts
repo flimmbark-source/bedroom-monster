@@ -16,11 +16,12 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private idleTween?: Phaser.Tweens.Tween;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, '__WHITE');
+    super(scene, x, y, 'monster-circle');
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDisplaySize(40, 40);
-    this.setCircle(18, 2, 2).setTintFill(this.baseTint);
+    this.setCircle(18, 2, 2);
+    this.setTintFill(this.baseTint);
 
     // Gentle idle breathing so the monster feels alive between actions.
     this.idleTween = scene.tweens.add({
