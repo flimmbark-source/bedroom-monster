@@ -104,7 +104,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
-    
+
     this.showSweepTelegraph(player, 120, 0xffbb55, '🌀', 360);
 
     this.startAction('sweep', [
@@ -235,7 +235,6 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       },
     ]);
   }
-
 
   private showSweepTelegraph(
     player: Phaser.Physics.Arcade.Sprite,

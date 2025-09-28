@@ -15,14 +15,13 @@ export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   monster!: Monster;
   cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  keyUse1!: Phaser.Input.Keyboard.Key; keyUse2!: Phaser.Input.Keyboard.Key;
   keyPick!: Phaser.Input.Keyboard.Key; keyDrop!: Phaser.Input.Keyboard.Key; keyCraft!: Phaser.Input.Keyboard.Key;
 
   hp = PLAYER_BASE.hp; inv: Inventory = [null, null];
   itemsGroup!: Phaser.Physics.Arcade.StaticGroup;
   hud!: HudElements;
   private fxDepth = 200;
-
+  private aimAngle = -Math.PI / 2;
   constructor() { super('Play'); }
 
   preload() {
@@ -78,11 +77,18 @@ export class PlayScene extends Phaser.Scene {
 
     // input
     this.cursors = this.input.keyboard!.createCursorKeys();
-    this.keyUse1 = this.input.keyboard!.addKey('ONE');
-    this.keyUse2 = this.input.keyboard!.addKey('TWO');
     this.keyPick = this.input.keyboard!.addKey('E');
     this.keyDrop = this.input.keyboard!.addKey('G');
     this.keyCraft = this.input.keyboard!.addKey('R');
+
+    this.input.mouse?.disableContextMenu();
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.updateAimFromPointer(pointer));
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.updateAimFromPointer(pointer);
+      if (pointer.leftButtonDown()) this.use(0);
+      if (pointer.rightButtonDown()) this.use(1);
+    });
+    this.updateAimFromPointer();
 
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
@@ -175,22 +181,33 @@ export class PlayScene extends Phaser.Scene {
 
   tryMelee(dmg: number, range: number, fire = false) {
 
+    const spread = Phaser.Math.DegToRad(120);
     this.showMeleeTelegraph(range, fire ? 0xff8844 : 0x6cc4ff, fire ? '🔥' : '🗡️');
-
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    if (d <= range) {
+    const aim = this.getAimAngle();
+    const toTarget = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
+    const diff = Math.abs(Phaser.Math.Angle.Wrap(toTarget - aim));
+    if (d <= range && diff <= spread / 2) {
+
       this.hitMonster(dmg, fire ? '🔥' : '💥');
     }
     if (fire) {/* could apply DoT in later pass */}
   }
 
   throwBottle(dmg: number, fire = false, stun = false) {
-    // instant line check for proto
-    const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
 
-    this.showThrowTelegraph(360, fire ? 0xff9966 : 0x88d5ff, fire ? '🍷' : (stun ? '💨' : '🍾'), 420);
+    const range = 360;
+    const laneHalfWidth = 12;
+    this.showThrowTelegraph(range, fire ? 0xff9966 : 0x88d5ff, fire ? '🍷' : (stun ? '💨' : '🍾'), 420, laneHalfWidth * 2);
 
-    if (d < 360) {
+    const aim = this.getAimAngle();
+    const aimDir = new Phaser.Math.Vector2(Math.cos(aim), Math.sin(aim));
+    const toTarget = new Phaser.Math.Vector2(this.monster.x - this.player.x, this.monster.y - this.player.y);
+    const along = toTarget.dot(aimDir);
+    const cross = toTarget.x * aimDir.y - toTarget.y * aimDir.x;
+
+    if (along > 0 && along <= range && Math.abs(cross) <= laneHalfWidth) {
+
       this.hitMonster(dmg, fire ? '🔥' : stun ? '💫' : '💥');
       if (stun) this.monster.setVelocity(0,0);
     }
@@ -237,9 +254,18 @@ export class PlayScene extends Phaser.Scene {
   afterDelay(ms:number, fn:()=>void) { this.time.delayedCall(ms, fn); }
 
 
-  private getPlayerFacingAngle() {
-    if (!this.monster?.active) return -Math.PI / 2;
-    return Phaser.Math.Angle.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
+  private updateAimFromPointer(pointer?: Phaser.Input.Pointer) {
+    if (!this.player) return;
+    const p = pointer ?? this.input.activePointer;
+    if (!p) return;
+    const worldPoint = this.cameras.main.getWorldPoint(p.x, p.y);
+    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, worldPoint.x, worldPoint.y);
+    if (!Number.isNaN(angle)) this.aimAngle = angle;
+  }
+
+  private getAimAngle() {
+    return this.aimAngle;
+
   }
 
   private showMeleeTelegraph(range: number, color: number, emoji: string, duration = 300) {
@@ -264,7 +290,9 @@ export class PlayScene extends Phaser.Scene {
       .setScale(0.9);
 
     const updatePositions = () => {
-      const angle = this.getPlayerFacingAngle();
+
+      const angle = this.getAimAngle();
+
       gfx.setPosition(this.player.x, this.player.y);
       gfx.setRotation(angle);
       const tipX = this.player.x + Math.cos(angle) * range * 0.92;
@@ -295,8 +323,9 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
-  private showThrowTelegraph(range: number, color: number, emoji: string, duration = 420) {
-    const thickness = 24;
+
+  private showThrowTelegraph(range: number, color: number, emoji: string, duration = 420, thickness = 24) {
+
     const rect = this.add.rectangle(this.player.x, this.player.y, range, thickness, color, 0.2)
       .setDepth(this.fxDepth)
       .setOrigin(0, 0.5)
@@ -310,7 +339,9 @@ export class PlayScene extends Phaser.Scene {
       .setScale(0.85);
 
     const updatePositions = () => {
-      const angle = this.getPlayerFacingAngle();
+
+      const angle = this.getAimAngle();
+
       rect.setPosition(this.player.x, this.player.y);
       rect.setRotation(angle);
       const tipX = this.player.x + Math.cos(angle) * range;
@@ -339,7 +370,6 @@ export class PlayScene extends Phaser.Scene {
       ease: 'Sine.easeOut',
       duration,
       onUpdate: updatePositions,
-
       onComplete: () => icon.destroy(),
     });
   }
@@ -362,6 +392,8 @@ export class PlayScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
+    this.updateAimFromPointer();
+
     // movement
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     const speed = 260; body.setVelocity(0,0);
@@ -378,8 +410,6 @@ export class PlayScene extends Phaser.Scene {
     // interaction
     if (Phaser.Input.Keyboard.JustDown(this.keyPick)) this.tryPickup();
     if (Phaser.Input.Keyboard.JustDown(this.keyDrop)) this.drop(0);
-    if (Phaser.Input.Keyboard.JustDown(this.keyUse1)) this.use(0);
-    if (Phaser.Input.Keyboard.JustDown(this.keyUse2)) this.use(1);
     if (Phaser.Input.Keyboard.JustDown(this.keyCraft)) this.craft();
 
     // monster update
