@@ -3,6 +3,7 @@ import { ROOM_W, ROOM_H } from './config';
 
 export class Monster extends Phaser.Physics.Arcade.Sprite {
   hp = 12;
+  private hpMax = this.hp;
   state: 'wander'|'chase'|'engage' = 'wander';
   actionT = { sweep: 2.5, smash: 4.0, rush: 5.0, roar: 7.0 };
   cd = { sweep: 0, smash: 0, rush: 0, roar: 0 };
@@ -15,6 +16,17 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private currentChain?: Phaser.Tweens.TweenChain;
   private idleTween?: Phaser.Tweens.Tween;
   private telegraphDepth = 90;
+  private hpBarBg: Phaser.GameObjects.Rectangle;
+  private hpBarFill: Phaser.GameObjects.Rectangle;
+  private hpBarWidth = 52;
+
+  setDepth(value: number): this {
+    super.setDepth(value);
+    if (this.hpBarBg) this.hpBarBg.setDepth(value + 3);
+    if (this.hpBarFill) this.hpBarFill.setDepth(value + 4);
+    return this;
+  }
+
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'monster-circle');
@@ -23,6 +35,16 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.setDisplaySize(40, 40);
     this.setCircle(18, 2, 2);
     this.setTintFill(this.baseTint);
+
+    // HP bar visuals hover above the monster and track its current health.
+    const barY = this.getHpBarY();
+    this.hpBarBg = scene.add.rectangle(x, barY, this.hpBarWidth + 4, 8, 0x07090d, 0.65)
+      .setOrigin(0.5, 0.5)
+      .setDepth(this.depth + 3);
+    this.hpBarFill = scene.add.rectangle(x - this.hpBarWidth / 2, barY, this.hpBarWidth, 4, 0xff6f6f)
+      .setOrigin(0, 0.5)
+      .setDepth(this.depth + 4);
+    this.refreshHpBar();
 
     // Gentle idle breathing so the monster feels alive between actions.
     this.idleTween = scene.tweens.add({
@@ -37,6 +59,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   update(dt: number, player: Phaser.Physics.Arcade.Sprite) {
+    this.layoutHpBar();
     const d = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
     this.state = d > 300 ? 'wander' : d > 140 ? 'chase' : 'engage';
 
@@ -70,6 +93,30 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       else if (this.cd.rush === 0) { this.rush(player); this.cd.rush = this.actionT.rush; }
       else if (this.cd.roar === 0) { this.roar(player); this.cd.roar = this.actionT.roar; }
     }
+  }
+
+  private getHpBarY() {
+    return this.y - this.displayHeight * 0.5 - 18;
+  }
+
+  private layoutHpBar() {
+    const barY = this.getHpBarY();
+    this.hpBarBg.setPosition(this.x, barY);
+    this.hpBarFill.setPosition(this.x - this.hpBarWidth / 2, barY);
+  }
+
+  refreshHpBar(): void {
+    const ratio = Phaser.Math.Clamp(this.hp / this.hpMax, 0, 1);
+    this.hpBarFill.setDisplaySize(this.hpBarWidth * ratio, 4);
+    const tint = ratio > 0.6 ? 0x7ee57d : ratio > 0.3 ? 0xffd76f : 0xff6f6f;
+    this.hpBarFill.setFillStyle(tint);
+    this.layoutHpBar();
+  }
+
+  preDestroy(): void {
+    this.hpBarBg.destroy();
+    this.hpBarFill.destroy();
+    super.preDestroy();
   }
 
   private startAction(
@@ -430,19 +477,16 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       duration,
       onUpdate: updatePositions,
       onComplete: () => { outer.destroy(); inner.destroy(); },
-
     });
 
     this.scene.tweens.add({
       targets: icon,
       alpha: { from: 0.95, to: 0 },
-
       y: { from: icon.y, to: icon.y - 12 },
       scale: { from: 0.9, to: 1.25 },
       ease: 'Sine.easeOut',
       duration,
       onUpdate: updatePositions,
-
       onComplete: () => icon.destroy(),
     });
   }
