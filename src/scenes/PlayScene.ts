@@ -15,12 +15,13 @@ export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   monster!: Monster;
   cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  keyUse1!: Phaser.Input.Keyboard.Key; keyUse2!: Phaser.Input.Keyboard.Key;
   keyPick!: Phaser.Input.Keyboard.Key; keyDrop!: Phaser.Input.Keyboard.Key; keyCraft!: Phaser.Input.Keyboard.Key;
 
   hp = PLAYER_BASE.hp; inv: Inventory = [null, null];
   itemsGroup!: Phaser.Physics.Arcade.StaticGroup;
   hud!: HudElements;
+  private fxDepth = 200;
+  private aimAngle = -Math.PI / 2;
 
   constructor() { super('Play'); }
 
@@ -61,10 +62,12 @@ export class PlayScene extends Phaser.Scene {
     this.player.setDisplaySize(32, 32);
     this.player.setCircle(14, 2, 2);
     this.player.setCollideWorldBounds(true);
+    this.player.setDepth(10);
     this.physics.add.collider(this.player, blocks);
 
     // monster
     this.monster = new Monster(this, 900, 700);
+    this.monster.setDepth(10);
     this.physics.add.collider(this.monster, blocks);
     this.physics.add.overlap(this.monster, this.player, () => {
       // contact damage once per second (simple throttle)
@@ -75,11 +78,18 @@ export class PlayScene extends Phaser.Scene {
 
     // input
     this.cursors = this.input.keyboard!.createCursorKeys();
-    this.keyUse1 = this.input.keyboard!.addKey('ONE');
-    this.keyUse2 = this.input.keyboard!.addKey('TWO');
     this.keyPick = this.input.keyboard!.addKey('E');
     this.keyDrop = this.input.keyboard!.addKey('G');
     this.keyCraft = this.input.keyboard!.addKey('R');
+
+    this.input.mouse?.disableContextMenu();
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.updateAimFromPointer(pointer));
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      this.updateAimFromPointer(pointer);
+      if (pointer.leftButtonDown()) this.use(0);
+      if (pointer.rightButtonDown()) this.use(1);
+    });
+    this.updateAimFromPointer();
 
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
@@ -171,16 +181,31 @@ export class PlayScene extends Phaser.Scene {
   }
 
   tryMelee(dmg: number, range: number, fire = false) {
+    const spread = Phaser.Math.DegToRad(120);
+    this.showMeleeTelegraph(range, fire ? 0xff8844 : 0x6cc4ff, fire ? '🔥' : '🗡️');
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    if (d <= range) this.hitMonster(dmg);
+    const aim = this.getAimAngle();
+    const toTarget = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
+    const diff = Math.abs(Phaser.Math.Angle.Wrap(toTarget - aim));
+    if (d <= range && diff <= spread / 2) {
+      this.hitMonster(dmg, fire ? '🔥' : '💥');
+    }
     if (fire) {/* could apply DoT in later pass */}
   }
 
   throwBottle(dmg: number, fire = false, stun = false) {
-    // instant line check for proto
-    const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    if (d < 360) {
-      this.hitMonster(dmg);
+    const range = 360;
+    const laneHalfWidth = 12;
+    this.showThrowTelegraph(range, fire ? 0xff9966 : 0x88d5ff, fire ? '🍷' : (stun ? '💨' : '🍾'), 420, laneHalfWidth * 2);
+
+    const aim = this.getAimAngle();
+    const aimDir = new Phaser.Math.Vector2(Math.cos(aim), Math.sin(aim));
+    const toTarget = new Phaser.Math.Vector2(this.monster.x - this.player.x, this.monster.y - this.player.y);
+    const along = toTarget.dot(aimDir);
+    const cross = toTarget.x * aimDir.y - toTarget.y * aimDir.x;
+
+    if (along > 0 && along <= range && Math.abs(cross) <= laneHalfWidth) {
+      this.hitMonster(dmg, fire ? '🔥' : stun ? '💫' : '💥');
       if (stun) this.monster.setVelocity(0,0);
     }
   }
@@ -210,20 +235,152 @@ export class PlayScene extends Phaser.Scene {
     if (this.hp <= 0) this.scene.restart();
   }
 
-  hitMonster(n: number) {
+  hitMonster(n: number, emoji: string = '💥') {
     this.monster.hp -= n;
     this.monster.setTint(0xffdddd); this.time.delayedCall(80, () => this.monster.clearTint());
+    this.spawnFloatingEmoji(this.monster.x, this.monster.y - 30, emoji, 26, 0xfff4d3);
     if (this.monster.hp <= 0) this.scene.restart();
   }
 
   speedBoost(ms: number) {
     (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 360;
     this.time.delayedCall(ms, () => (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 260);
+    this.spawnFloatingEmoji(this.player.x, this.player.y - 40, '⚡', 24, 0xe8ff9e, ms);
   }
 
   afterDelay(ms:number, fn:()=>void) { this.time.delayedCall(ms, fn); }
 
+  private updateAimFromPointer(pointer?: Phaser.Input.Pointer) {
+    if (!this.player) return;
+    const p = pointer ?? this.input.activePointer;
+    if (!p) return;
+    const worldPoint = this.cameras.main.getWorldPoint(p.x, p.y);
+    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, worldPoint.x, worldPoint.y);
+    if (!Number.isNaN(angle)) this.aimAngle = angle;
+  }
+
+  private getAimAngle() {
+    return this.aimAngle;
+  }
+
+  private showMeleeTelegraph(range: number, color: number, emoji: string, duration = 300) {
+    const spread = Phaser.Math.DegToRad(120);
+    const gfx = this.add.graphics({ x: this.player.x, y: this.player.y });
+    gfx.setDepth(this.fxDepth).setAlpha(0.85).setScale(0.45);
+    gfx.fillStyle(color, 0.22);
+    gfx.beginPath();
+    gfx.moveTo(0, 0);
+    gfx.arc(0, 0, range, -spread / 2, spread / 2, false);
+    gfx.closePath();
+    gfx.fillPath();
+    gfx.lineStyle(3, color, 0.95);
+    gfx.beginPath();
+    gfx.arc(0, 0, range, -spread / 2, spread / 2, false);
+    gfx.strokePath();
+
+    const icon = this.add.text(this.player.x, this.player.y, emoji, { fontSize: '28px' })
+      .setOrigin(0.5)
+      .setDepth(this.fxDepth + 1)
+      .setAlpha(0.95)
+      .setScale(0.9);
+
+    const updatePositions = () => {
+      const angle = this.getAimAngle();
+      gfx.setPosition(this.player.x, this.player.y);
+      gfx.setRotation(angle);
+      const tipX = this.player.x + Math.cos(angle) * range * 0.92;
+      const tipY = this.player.y + Math.sin(angle) * range * 0.92;
+      if (icon.active) icon.setPosition(tipX, tipY - 18);
+    };
+
+    updatePositions();
+
+    this.tweens.add({
+      targets: gfx,
+      scale: { from: 0.45, to: 1 },
+      alpha: { from: 0.85, to: 0 },
+      ease: 'Cubic.easeOut',
+      duration,
+      onUpdate: updatePositions,
+      onComplete: () => gfx.destroy(),
+    });
+
+    this.tweens.add({
+      targets: icon,
+      alpha: { from: 0.95, to: 0 },
+      scale: { from: 0.9, to: 1.3 },
+      ease: 'Sine.easeOut',
+      duration,
+      onUpdate: updatePositions,
+      onComplete: () => icon.destroy(),
+    });
+  }
+
+  private showThrowTelegraph(range: number, color: number, emoji: string, duration = 420, thickness = 24) {
+    const rect = this.add.rectangle(this.player.x, this.player.y, range, thickness, color, 0.2)
+      .setDepth(this.fxDepth)
+      .setOrigin(0, 0.5)
+      .setAlpha(0.9)
+      .setScale(0.1, 1);
+
+    const icon = this.add.text(this.player.x, this.player.y, emoji, { fontSize: '26px' })
+      .setOrigin(0.5)
+      .setDepth(this.fxDepth + 1)
+      .setAlpha(0.95)
+      .setScale(0.85);
+
+    const updatePositions = () => {
+      const angle = this.getAimAngle();
+      rect.setPosition(this.player.x, this.player.y);
+      rect.setRotation(angle);
+      const tipX = this.player.x + Math.cos(angle) * range;
+      const tipY = this.player.y + Math.sin(angle) * range;
+      if (icon.active) icon.setPosition(tipX, tipY);
+    };
+
+    updatePositions();
+
+    this.tweens.add({
+      targets: rect,
+      scaleX: { from: 0.1, to: 1 },
+      alpha: { from: 0.9, to: 0 },
+      ease: 'Cubic.easeOut',
+      duration,
+      onUpdate: updatePositions,
+      onComplete: () => rect.destroy(),
+    });
+
+    this.tweens.add({
+      targets: icon,
+      alpha: { from: 0.95, to: 0 },
+      scale: { from: 0.85, to: 1.2 },
+      ease: 'Sine.easeOut',
+      duration,
+      onUpdate: updatePositions,
+      onComplete: () => icon.destroy(),
+    });
+  }
+
+  private spawnFloatingEmoji(x: number, y: number, emoji: string, fontSize = 24, tint = 0xffffff, duration = 480) {
+    const label = this.add.text(x, y, emoji, {
+      fontSize: `${fontSize}px`,
+    }).setOrigin(0.5).setDepth(this.fxDepth + 2);
+
+    label.setTint(tint);
+
+    this.tweens.add({
+      targets: label,
+      alpha: { from: 1, to: 0 },
+      y: y - 20,
+      duration,
+      ease: 'Sine.easeOut',
+      onComplete: () => label.destroy(),
+    });
+  }
+
   update(time: number, delta: number) {
+    this.updateAimFromPointer();
+
     // movement
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     const speed = 260; body.setVelocity(0,0);
@@ -240,8 +397,6 @@ export class PlayScene extends Phaser.Scene {
     // interaction
     if (Phaser.Input.Keyboard.JustDown(this.keyPick)) this.tryPickup();
     if (Phaser.Input.Keyboard.JustDown(this.keyDrop)) this.drop(0);
-    if (Phaser.Input.Keyboard.JustDown(this.keyUse1)) this.use(0);
-    if (Phaser.Input.Keyboard.JustDown(this.keyUse2)) this.use(1);
     if (Phaser.Input.Keyboard.JustDown(this.keyCraft)) this.craft();
 
     // monster update
