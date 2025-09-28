@@ -6,6 +6,11 @@ import { craft } from '@game/recipes';
 import { Monster } from '@game/monster';
 import { createHUD, drawHUD, type HudElements } from '@ui/hud';
 
+interface GroundItem extends Phaser.GameObjects.Arc {
+  itemId: Item['id'];
+  label: Phaser.GameObjects.Text;
+}
+
 export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   monster!: Monster;
@@ -79,13 +84,12 @@ export class PlayScene extends Phaser.Scene {
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
     const spawn = (x:number,y:number,id: Item['id']) => {
-      const circle = this.add.circle(0,0,8,0x7cc7a1);
-      const label = this.add.text(0,-18,id,{fontSize:'10px'}).setOrigin(0.5,1);
-      const container = this.add.container(x,y,[circle,label]);
-      this.physics.add.existing(container, true);
-      this.configureItemBody(container);
-      (container as any).itemId = id;
-      this.itemsGroup.add(container as any);
+      const circle = this.add.circle(x,y,8,0x7cc7a1) as GroundItem;
+      circle.label = this.add.text(x, y - 18, id, { fontSize: '10px' }).setOrigin(0.5,1);
+      circle.itemId = id;
+      this.physics.add.existing(circle, true);
+      this.configureItemBody(circle);
+      this.itemsGroup.add(circle);
     };
     // starter items
     spawn(260, 560, 'knife');
@@ -96,7 +100,7 @@ export class PlayScene extends Phaser.Scene {
     spawn(680, 720, 'yoyo');
 
     this.physics.add.overlap(this.player, this.itemsGroup, (_, obj:any) => {
-      (this as any)._overItem = obj;
+      (this as any)._overItem = obj as GroundItem;
     });
 
     // player hit listener
@@ -107,17 +111,18 @@ export class PlayScene extends Phaser.Scene {
   }
 
   tryPickup() {
-    const obj: any = (this as any)._overItem; if (!obj) return;
+    const obj: GroundItem | null = (this as any)._overItem || null; if (!obj) return;
     const id = obj.itemId as Item['id'];
     // find slot
     const idx = this.inv[0]? (this.inv[1]? -1 : 1) : 0;
     if (idx === -1) {
       // swap with slot 0 by default
       const dropped = this.inv[0]!; this.inv[0] = { ...cloneItem(id) };
-      (obj as any).itemId = dropped.id; // leave the dropped one on ground
-      (obj.list[1] as Phaser.GameObjects.Text).setText(dropped.id);
+      obj.itemId = dropped.id; // leave the dropped one on ground
+      obj.label.setText(dropped.id);
     } else {
       this.inv[idx] = { ...cloneItem(id) };
+      obj.label.destroy();
       obj.destroy();
       (this as any)._overItem = null;
     }
@@ -126,13 +131,12 @@ export class PlayScene extends Phaser.Scene {
   drop(slot: 0|1) {
     const it = this.inv[slot]; if (!it) return;
     this.inv[slot] = null;
-    const circle = this.add.circle(0,0,8,0x7cc7a1);
-    const label = this.add.text(0,-18,it.id,{fontSize:'10px'}).setOrigin(0.5,1);
-    const container = this.add.container(this.player.x+14,this.player.y+14,[circle,label]);
-    this.physics.add.existing(container, true);
-    this.configureItemBody(container);
-    (container as any).itemId = it.id;
-    this.itemsGroup.add(container as any);
+    const circle = this.add.circle(this.player.x + 14, this.player.y + 14, 8, 0x7cc7a1) as GroundItem;
+    circle.label = this.add.text(circle.x, circle.y - 18, it.id, { fontSize: '10px' }).setOrigin(0.5, 1);
+    circle.itemId = it.id;
+    this.physics.add.existing(circle, true);
+    this.configureItemBody(circle);
+    this.itemsGroup.add(circle);
   }
 
   use(slot: 0|1) {
@@ -187,17 +191,16 @@ export class PlayScene extends Phaser.Scene {
     const other = slot === 0 ? 1 : 0;
     if (!this.inv[other]) { this.inv[other] = { id: 'bottle', label: 'Empty Bottle', uses: 1 }; return; }
     // drop
-    const circle = this.add.circle(0,0,8,0x7cc7a1);
-    const label = this.add.text(0,-18,'bottle',{fontSize:'10px'}).setOrigin(0.5,1);
-    const container = this.add.container(this.player.x+8,this.player.y+8,[circle,label]);
-    this.physics.add.existing(container, true);
-    this.configureItemBody(container);
-    (container as any).itemId = 'bottle';
-    this.itemsGroup.add(container as any);
+    const circle = this.add.circle(this.player.x + 8, this.player.y + 8, 8, 0x7cc7a1) as GroundItem;
+    circle.label = this.add.text(circle.x, circle.y - 18, 'bottle', { fontSize: '10px' }).setOrigin(0.5,1);
+    circle.itemId = 'bottle';
+    this.physics.add.existing(circle, true);
+    this.configureItemBody(circle);
+    this.itemsGroup.add(circle);
   }
 
-  private configureItemBody(container: Phaser.GameObjects.Container) {
-    const body = container.body as Phaser.Physics.Arcade.StaticBody;
+  private configureItemBody(item: GroundItem) {
+    const body = item.body as Phaser.Physics.Arcade.StaticBody;
     body.setSize(16, 16).setOffset(-8, -8);
     body.updateFromGameObject();
   }
@@ -229,7 +232,7 @@ export class PlayScene extends Phaser.Scene {
     if (this.cursors.up?.isDown) body.setVelocityY(-speed);
     if (this.cursors.down?.isDown) body.setVelocityY(speed);
 
-    const overItem: Phaser.GameObjects.Container | null = (this as any)._overItem || null;
+    const overItem: GroundItem | null = (this as any)._overItem || null;
     if (overItem && (!overItem.active || !this.physics.overlap(this.player, overItem as any))) {
       (this as any)._overItem = null;
     }
