@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { ROOM_W } from '@game/config';
 import type { Inventory, Item } from '@game/types';
 
 export type HudElements = {
@@ -19,6 +20,15 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
   frame.setScrollFactor(0);
   container.add(frame);
 
+  const controlsPanel = scene.add.graphics();
+  controlsPanel
+    .fillStyle(0x111111, 0.6)
+    .fillRoundedRect(ROOM_W - 236, 12, 224, 132, 8)
+    .lineStyle(1, 0x999999, 0.8)
+    .strokeRoundedRect(ROOM_W - 234, 14, 220, 128, 8);
+  controlsPanel.setScrollFactor(0);
+  container.add(controlsPanel);
+
   const hearts = scene.add.graphics();
   hearts.setScrollFactor(0);
   container.add(hearts);
@@ -37,6 +47,21 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
     makeSlotText(16, 0),
     makeSlotText(112, 1),
   ];
+
+  const controlsText = scene.add.text(
+    ROOM_W - 24,
+    24,
+    ['Controls', 'Arrow Keys: Move', '1 / 2: Use Items', 'E: Pick Up', 'G: Drop Item', 'R: Craft'].join('\n'),
+    {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      align: 'right',
+    },
+  );
+  controlsText.setOrigin(1, 0);
+  controlsText.setLineSpacing(4);
+  controlsText.setScrollFactor(0);
+  container.add(controlsText);
 
   // initialize once so the HUD starts with correct values
   const initialInv: Inventory = [null, null];
