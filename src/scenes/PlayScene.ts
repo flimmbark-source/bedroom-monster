@@ -4,7 +4,7 @@ import type { Inventory, Item } from '@game/types';
 import { cloneItem } from '@game/items';
 import { craft } from '@game/recipes';
 import { Monster } from '@game/monster';
-import { drawHUD } from '@ui/hud';
+import { createHUD, drawHUD, type HudElements } from '@ui/hud';
 
 export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
@@ -15,6 +15,7 @@ export class PlayScene extends Phaser.Scene {
 
   hp = PLAYER_BASE.hp; inv: Inventory = [null, null];
   itemsGroup!: Phaser.Physics.Arcade.StaticGroup;
+  hud!: HudElements;
 
   constructor() { super('Play'); }
 
@@ -84,7 +85,8 @@ export class PlayScene extends Phaser.Scene {
     // player hit listener
     this.player.on('hit', (e: any) => this.damagePlayer(e.dmg||1));
 
-    // HUD once; we’ll redraw per frame (simple for proto)
+    // HUD
+    this.hud = createHUD(this, 5);
   }
 
   tryPickup() {
@@ -209,8 +211,6 @@ export class PlayScene extends Phaser.Scene {
     this.monster.update(delta/1000, this.player);
 
     // HUD
-    this.children.removeAll(); // simple redraw for proto (cheap at small scale)
-    this.add.rectangle(ROOM_W/2, ROOM_H/2, ROOM_W, ROOM_H, 0x161a22).setStrokeStyle(2, 0x2a3242);
-    drawHUD(this, this.hp, 5, this.inv);
+    drawHUD(this.hud, this.hp, 5, this.inv);
   }
 }
