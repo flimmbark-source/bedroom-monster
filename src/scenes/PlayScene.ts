@@ -174,7 +174,9 @@ export class PlayScene extends Phaser.Scene {
   }
 
   tryMelee(dmg: number, range: number, fire = false) {
-    this.showActionRange(this.player.x, this.player.y, range, fire ? 0xff8844 : 0x6cc4ff, fire ? '🔥' : '🗡️');
+
+    this.showMeleeTelegraph(range, fire ? 0xff8844 : 0x6cc4ff, fire ? '🔥' : '🗡️');
+
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
     if (d <= range) {
       this.hitMonster(dmg, fire ? '🔥' : '💥');
@@ -185,7 +187,9 @@ export class PlayScene extends Phaser.Scene {
   throwBottle(dmg: number, fire = false, stun = false) {
     // instant line check for proto
     const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    this.showActionRange(this.player.x, this.player.y, 360, fire ? 0xff9966 : 0x88d5ff, fire ? '🍷' : (stun ? '💨' : '🍾'), 420);
+
+    this.showThrowTelegraph(360, fire ? 0xff9966 : 0x88d5ff, fire ? '🍷' : (stun ? '💨' : '🍾'), 420);
+
     if (d < 360) {
       this.hitMonster(dmg, fire ? '🔥' : stun ? '💫' : '💥');
       if (stun) this.monster.setVelocity(0,0);
@@ -232,33 +236,110 @@ export class PlayScene extends Phaser.Scene {
 
   afterDelay(ms:number, fn:()=>void) { this.time.delayedCall(ms, fn); }
 
-  private showActionRange(x: number, y: number, range: number, color: number, emoji: string, duration = 320) {
-    const circle = this.add.circle(x, y, range, color, 0.18)
-      .setStrokeStyle(2, color)
-      .setDepth(this.fxDepth)
-      .setAlpha(0.7)
-      .setScale(0.25);
-    const icon = this.add.text(x, y - range - 14, emoji, { fontSize: '28px' })
+
+  private getPlayerFacingAngle() {
+    if (!this.monster?.active) return -Math.PI / 2;
+    return Phaser.Math.Angle.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
+  }
+
+  private showMeleeTelegraph(range: number, color: number, emoji: string, duration = 300) {
+    const spread = Phaser.Math.DegToRad(120);
+    const gfx = this.add.graphics({ x: this.player.x, y: this.player.y });
+    gfx.setDepth(this.fxDepth).setAlpha(0.85).setScale(0.45);
+    gfx.fillStyle(color, 0.22);
+    gfx.beginPath();
+    gfx.moveTo(0, 0);
+    gfx.arc(0, 0, range, -spread / 2, spread / 2, false);
+    gfx.closePath();
+    gfx.fillPath();
+    gfx.lineStyle(3, color, 0.95);
+    gfx.beginPath();
+    gfx.arc(0, 0, range, -spread / 2, spread / 2, false);
+    gfx.strokePath();
+
+    const icon = this.add.text(this.player.x, this.player.y, emoji, { fontSize: '28px' })
       .setOrigin(0.5)
       .setDepth(this.fxDepth + 1)
-      .setAlpha(0.9);
+      .setAlpha(0.95)
+      .setScale(0.9);
+
+    const updatePositions = () => {
+      const angle = this.getPlayerFacingAngle();
+      gfx.setPosition(this.player.x, this.player.y);
+      gfx.setRotation(angle);
+      const tipX = this.player.x + Math.cos(angle) * range * 0.92;
+      const tipY = this.player.y + Math.sin(angle) * range * 0.92;
+      if (icon.active) icon.setPosition(tipX, tipY - 18);
+    };
+
+    updatePositions();
 
     this.tweens.add({
-      targets: circle,
-      scale: { from: 0.25, to: 1 },
-      alpha: { from: 0.7, to: 0 },
-      ease: 'Sine.easeOut',
+      targets: gfx,
+      scale: { from: 0.45, to: 1 },
+      alpha: { from: 0.85, to: 0 },
+      ease: 'Cubic.easeOut',
       duration,
-      onComplete: () => circle.destroy(),
+      onUpdate: updatePositions,
+      onComplete: () => gfx.destroy(),
     });
 
     this.tweens.add({
       targets: icon,
-      alpha: { from: 0.9, to: 0 },
-      y: icon.y - 16,
-      scale: { from: 0.8, to: 1.2 },
+      alpha: { from: 0.95, to: 0 },
+      scale: { from: 0.9, to: 1.3 },
       ease: 'Sine.easeOut',
       duration,
+      onUpdate: updatePositions,
+      onComplete: () => icon.destroy(),
+    });
+  }
+
+  private showThrowTelegraph(range: number, color: number, emoji: string, duration = 420) {
+    const thickness = 24;
+    const rect = this.add.rectangle(this.player.x, this.player.y, range, thickness, color, 0.2)
+      .setDepth(this.fxDepth)
+      .setOrigin(0, 0.5)
+      .setAlpha(0.9)
+      .setScale(0.1, 1);
+
+    const icon = this.add.text(this.player.x, this.player.y, emoji, { fontSize: '26px' })
+      .setOrigin(0.5)
+      .setDepth(this.fxDepth + 1)
+      .setAlpha(0.95)
+      .setScale(0.85);
+
+    const updatePositions = () => {
+      const angle = this.getPlayerFacingAngle();
+      rect.setPosition(this.player.x, this.player.y);
+      rect.setRotation(angle);
+      const tipX = this.player.x + Math.cos(angle) * range;
+      const tipY = this.player.y + Math.sin(angle) * range;
+      if (icon.active) icon.setPosition(tipX, tipY);
+    };
+
+    updatePositions();
+
+    this.tweens.add({
+      targets: rect,
+      scaleX: { from: 0.1, to: 1 },
+      alpha: { from: 0.9, to: 0 },
+      ease: 'Cubic.easeOut',
+      duration,
+      onUpdate: updatePositions,
+      onComplete: () => rect.destroy(),
+
+    });
+
+    this.tweens.add({
+      targets: icon,
+
+      alpha: { from: 0.95, to: 0 },
+      scale: { from: 0.85, to: 1.2 },
+      ease: 'Sine.easeOut',
+      duration,
+      onUpdate: updatePositions,
+
       onComplete: () => icon.destroy(),
     });
   }
