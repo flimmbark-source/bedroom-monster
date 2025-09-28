@@ -12,7 +12,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private baseScale = { x: 1, y: 1 };
   private baseAngle = 0;
   private actionLock = false;
-  private currentTimeline?: Phaser.Tweens.Timeline;
+  private currentChain?: Phaser.Tweens.TweenChain;
   private idleTween?: Phaser.Tweens.Tween;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -48,7 +48,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       if (speed > 40) {
         this.idleTween?.pause();
         this.setScale(1.05, 0.95);
-      } else if (!this.currentTimeline) {
+      } else if (!this.currentChain) {
         this.resetPose();
         this.idleTween?.resume();
       }
@@ -79,18 +79,18 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
     this.actionLock = true;
     this.setVelocity(0, 0);
-    this.currentTimeline?.stop();
+    this.currentChain?.stop();
     this.idleTween?.pause();
 
     const timelineTweens = Array.isArray(tweens) ? tweens : [tweens];
 
-    this.currentTimeline = this.scene.tweens.timeline({
+    this.currentChain = this.scene.tweens.chain({
       targets: this,
       tweens: timelineTweens,
       onComplete: () => {
         this.resetPose();
         this.actionLock = false;
-        this.currentTimeline = undefined;
+        this.currentChain = undefined;
         this.idleTween?.resume();
       },
     });
