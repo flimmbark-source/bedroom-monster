@@ -23,12 +23,12 @@ export class PlayScene extends Phaser.Scene {
   private fxDepth = 200;
   private aimAngle = -Math.PI / 2;
   private restockPoints = [
-    { x: 260, y: 560 },
-    { x: 980, y: 560 },
-    { x: 640, y: 260 },
-    { x: 720, y: 260 },
-    { x: 380, y: 720 },
-    { x: 680, y: 720 },
+    { x: 220, y: 480 },
+    { x: 1080, y: 480 },
+    { x: 640, y: 200 },
+    { x: 780, y: 320 },
+    { x: 420, y: 640 },
+    { x: 860, y: 640 },
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   constructor() { super('Play'); }
@@ -54,6 +54,8 @@ export class PlayScene extends Phaser.Scene {
     this.resetPlayerState();
     this.createAnimations();
 
+    this.physics.world.setBounds(0, 0, ROOM_W, ROOM_H);
+
     // room bg
     this.add.rectangle(ROOM_W/2, ROOM_H/2, ROOM_W, ROOM_H, 0x161a22).setStrokeStyle(2, 0x2a3242);
 
@@ -64,11 +66,11 @@ export class PlayScene extends Phaser.Scene {
       this.physics.add.existing(r, true);
       blocks.add(r as any);
     };
-    addBlock(600, 200, 280, 40); // bed top
-    addBlock(600, 240, 280, 40); // bed bottom
-    addBlock(240, 520, 180, 60); // desk
-    addBlock(980, 520, 120, 60); // dresser
-    addBlock(560, 700, 320, 40); // rug edge (as blocker for proto)
+    addBlock(320, 180, 360, 40); // bed headboard
+    addBlock(320, 240, 360, 40); // bed foot
+    addBlock(260, 540, 220, 60); // desk
+    addBlock(1040, 520, 160, 60); // dresser
+    addBlock(700, 640, 420, 40); // rug edge (as blocker for proto)
 
     // player
     this.player = this.physics.add.sprite(200, 200, 'player', 16);
@@ -116,12 +118,12 @@ export class PlayScene extends Phaser.Scene {
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
     // starter items
-    this.createGroundItem(260, 560, 'knife');
-    this.createGroundItem(980, 560, 'bottle');
-    this.createGroundItem(640, 260, 'soda');
-    this.createGroundItem(720, 260, 'match');
-    this.createGroundItem(380, 720, 'bandaid');
-    this.createGroundItem(680, 720, 'yoyo');
+    this.createGroundItem(220, 480, 'knife');
+    this.createGroundItem(1080, 480, 'bottle');
+    this.createGroundItem(640, 200, 'soda');
+    this.createGroundItem(780, 320, 'match');
+    this.createGroundItem(420, 640, 'bandaid');
+    this.createGroundItem(860, 640, 'yoyo');
 
     this.time.addEvent({
       delay: 15000,
