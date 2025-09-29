@@ -43,11 +43,8 @@ export class PlayScene extends Phaser.Scene {
       frameHeight: 128,
     });
 
-    Object.entries(ITEM_TEXTURE_PATHS).forEach(([key, path]) => {
-      if (!this.textures.exists(key)) {
-        this.load.image(key, path);
-      }
-    });
+    this.load.atlas('furniture', 'assets/sprites/furniture.png', 'assets/sprites/furniture.json');
+
   }
 
   create() {
@@ -60,17 +57,34 @@ export class PlayScene extends Phaser.Scene {
     this.add.rectangle(ROOM_W/2, ROOM_H/2, ROOM_W, ROOM_H, 0x161a22).setStrokeStyle(2, 0x2a3242);
 
     // furniture (blocking)
-    const blocks = this.physics.add.staticGroup();
-    const addBlock = (x:number,y:number,w:number,h:number)=>{
-      const r = this.add.rectangle(x,y,w,h,0x222831).setStrokeStyle(1,0x3a4152);
-      this.physics.add.existing(r, true);
-      blocks.add(r as any);
+    const furniture = this.physics.add.staticGroup();
+    const createFurniture = (
+      x: number,
+      y: number,
+      frame: string,
+      bodyWidth?: number,
+      bodyHeight?: number,
+    ) => {
+      const sprite = this.physics.add.staticSprite(x, y, 'furniture', frame);
+      sprite.setDepth(1);
+      if (bodyWidth && bodyHeight) {
+        const body = sprite.body as Phaser.Physics.Arcade.StaticBody;
+        const offsetX = (sprite.width - bodyWidth) / 2;
+        const offsetY = (sprite.height - bodyHeight) / 2;
+        body.setSize(bodyWidth, bodyHeight);
+        body.setOffset(offsetX, offsetY);
+        sprite.refreshBody();
+      }
+      furniture.add(sprite);
+      return sprite;
     };
-    addBlock(320, 180, 360, 40); // bed headboard
-    addBlock(320, 240, 360, 40); // bed foot
-    addBlock(260, 540, 220, 60); // desk
-    addBlock(1040, 520, 160, 60); // dresser
-    addBlock(700, 640, 420, 40); // rug edge (as blocker for proto)
+
+
+    createFurniture(660, 260, 'bed', 200, 200);
+    createFurniture(260, 560, 'desk', 200, 90);
+    createFurniture(980, 540, 'dresser', 80, 140);
+    createFurniture(560, 720, 'rug', 200, 60);
+
 
     // player
     this.player = this.physics.add.sprite(200, 200, 'player', 16);
@@ -82,12 +96,12 @@ export class PlayScene extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
     this.player.anims.play('player-idle');
-    this.physics.add.collider(this.player, blocks);
+    this.physics.add.collider(this.player, furniture);
 
     // monster
     this.monster = new Monster(this, 900, 700);
     this.monster.setDepth(10);
-    this.physics.add.collider(this.monster, blocks);
+    this.physics.add.collider(this.monster, furniture);
     this.physics.add.overlap(this.monster, this.player, () => {
       // contact damage once per second (simple throttle)
       if (!(this.player as any)._lastHit || this.time.now - (this.player as any)._lastHit > 1000) {

@@ -1,0 +1,44 @@
+{
+  "frames": {
+    "bed": {
+      "frame": { "x": 29, "y": 31, "w": 219, "h": 273 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 219, "h": 273 },
+      "sourceSize": { "w": 219, "h": 273 },
+      "pivot": { "x": 0.5, "y": 0.5 }
+    },
+    "desk": {
+      "frame": { "x": 272, "y": 208, "w": 216, "h": 128 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 216, "h": 128 },
+      "sourceSize": { "w": 216, "h": 128 },
+      "pivot": { "x": 0.5, "y": 0.5 }
+    },
+    "dresser": {
+      "frame": { "x": 495, "y": 361, "w": 98, "h": 159 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 98, "h": 159 },
+      "sourceSize": { "w": 98, "h": 159 },
+      "pivot": { "x": 0.5, "y": 0.5 }
+    },
+    "rug": {
+      "frame": { "x": 29, "y": 336, "w": 219, "h": 145 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 219, "h": 145 },
+      "sourceSize": { "w": 219, "h": 145 },
+      "pivot": { "x": 0.5, "y": 0.5 }
+    }
+  },
+  "meta": {
+    "app": "generated manually",
+    "version": "1.0",
+    "image": "furniture.png",
+    "format": "RGBA8888",
+    "size": { "w": 1024, "h": 1024 },
+    "scale": "1"
+  }
+}
