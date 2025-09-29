@@ -132,8 +132,8 @@ export class PlayScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(200, 200, 'player', 8);
     this.player.setScale(0.5);
     const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
-    playerBody.setSize(28, 32);
-    playerBody.setOffset(18, 66);
+    playerBody.setSize(38, 48);
+    playerBody.setOffset(13, 50);
     playerBody.maxSpeed = 260;
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
