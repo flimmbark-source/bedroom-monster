@@ -58,6 +58,7 @@ export class PlayScene extends Phaser.Scene {
   private searchDuration = 0;
   private searchBar?: Phaser.GameObjects.Graphics;
   private searchCheckpoints: SearchCheckpoint[] = [];
+  private playerFacing: 'up' | 'down' | 'left' | 'right' = 'down';
   constructor() { super('Play'); }
 
   preload() {
@@ -137,7 +138,7 @@ export class PlayScene extends Phaser.Scene {
     playerBody.maxSpeed = 260;
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
-    this.player.anims.play('player-idle');
+    this.player.anims.play('player-idle-down');
     this.physics.add.collider(this.player, furniture);
 
     // monster
@@ -627,6 +628,7 @@ export class PlayScene extends Phaser.Scene {
 
   private resetPlayerState() {
     this.hp = PLAYER_BASE.hp;
+    this.playerFacing = 'down';
   }
 
   private showMeleeTelegraph(range: number, color: number, emoji: string, duration = 300) {
@@ -1099,7 +1101,23 @@ export class PlayScene extends Phaser.Scene {
     }
 
     const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
-    this.player.anims.play(moving ? 'player-walk' : 'player-idle', true);
+    if (moving) {
+      const absX = Math.abs(body.velocity.x);
+      const absY = Math.abs(body.velocity.y);
+      if (absX > absY) {
+        this.playerFacing = body.velocity.x > 0 ? 'right' : 'left';
+      } else if (absY > 0) {
+        this.playerFacing = body.velocity.y > 0 ? 'down' : 'up';
+      }
+    } else if (attemptingMovement) {
+      if (this.cursors.left?.isDown) this.playerFacing = 'left';
+      else if (this.cursors.right?.isDown) this.playerFacing = 'right';
+      else if (this.cursors.up?.isDown) this.playerFacing = 'up';
+      else if (this.cursors.down?.isDown) this.playerFacing = 'down';
+    }
+
+    const playerAnim = `player-${moving ? 'walk' : 'idle'}-${this.playerFacing}` as const;
+    this.player.anims.play(playerAnim, true);
 
     const overItem: GroundItem | null = (this as any)._overItem || null;
     if (overItem && (!overItem.active || !this.physics.overlap(this.player, overItem as any))) {
@@ -1126,40 +1144,54 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private createAnimations() {
-    if (!this.anims.exists('player-idle')) {
-      this.anims.create({
-        key: 'player-idle',
-        frames: this.anims.generateFrameNumbers('player', { frames: [8, 9, 10, 11] }),
-        frameRate: 6,
+    const ensureAnimation = (key: string, config: Phaser.Types.Animations.Animation) => {
+      if (!this.anims.exists(key)) this.anims.create(config);
+    };
+
+    const playerDirections: Record<'up' | 'down' | 'left' | 'right', number> = {
+      up: 0,
+      down: 1,
+      right: 2,
+      left: 3,
+    };
+
+    Object.entries(playerDirections).forEach(([dir, row]) => {
+      const base = row * 4;
+      ensureAnimation(`player-idle-${dir}`, {
+        key: `player-idle-${dir}`,
+        frames: [{ key: 'player', frame: base }],
+        frameRate: 1,
         repeat: -1,
       });
-    }
-
-    if (!this.anims.exists('player-walk')) {
-      this.anims.create({
-        key: 'player-walk',
-        frames: this.anims.generateFrameNumbers('player', { start: 8, end: 11 }),
+      ensureAnimation(`player-walk-${dir}`, {
+        key: `player-walk-${dir}`,
+        frames: this.anims.generateFrameNumbers('player', { start: base, end: base + 3 }),
         frameRate: 10,
         repeat: -1,
       });
-    }
+    });
 
-    if (!this.anims.exists('monster-idle')) {
-      this.anims.create({
-        key: 'monster-idle',
-        frames: this.anims.generateFrameNumbers('monster', { start: 0, end: 7 }),
-        frameRate: 5,
+    const monsterDirections: Record<'up' | 'down' | 'left' | 'right', number> = {
+      down: 0,
+      left: 1,
+      right: 2,
+      up: 3,
+    };
+
+    Object.entries(monsterDirections).forEach(([dir, row]) => {
+      const base = row * 4;
+      ensureAnimation(`monster-idle-${dir}`, {
+        key: `monster-idle-${dir}`,
+        frames: [{ key: 'monster', frame: base }],
+        frameRate: 1,
         repeat: -1,
       });
-    }
-
-    if (!this.anims.exists('monster-walk')) {
-      this.anims.create({
-        key: 'monster-walk',
-        frames: this.anims.generateFrameNumbers('monster', { start: 8, end: 15 }),
+      ensureAnimation(`monster-walk-${dir}`, {
+        key: `monster-walk-${dir}`,
+        frames: this.anims.generateFrameNumbers('monster', { start: base, end: base + 3 }),
         frameRate: 7,
         repeat: -1,
       });
-    }
+    });
   }
 }
