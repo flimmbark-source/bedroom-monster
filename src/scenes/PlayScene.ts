@@ -62,8 +62,8 @@ export class PlayScene extends Phaser.Scene {
 
   preload() {
     this.load.spritesheet('player', 'assets/sprites/player.png', {
-      frameWidth: 64,
-      frameHeight: 105,
+      frameWidth: 102,
+      frameHeight: 128,
     });
     this.load.spritesheet('monster', 'assets/sprites/monster.png', {
       frameWidth: 128,
@@ -129,7 +129,7 @@ export class PlayScene extends Phaser.Scene {
 
 
     // player
-    this.player = this.physics.add.sprite(200, 200, 'player', 16);
+    this.player = this.physics.add.sprite(200, 200, 'player', 8);
     this.player.setScale(0.5);
     const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     playerBody.setSize(28, 32);
@@ -1129,7 +1129,7 @@ export class PlayScene extends Phaser.Scene {
     if (!this.anims.exists('player-idle')) {
       this.anims.create({
         key: 'player-idle',
-        frames: this.anims.generateFrameNumbers('player', { frames: [16, 17, 18, 19] }),
+        frames: this.anims.generateFrameNumbers('player', { frames: [8, 9, 10, 11] }),
         frameRate: 6,
         repeat: -1,
       });
@@ -1138,7 +1138,7 @@ export class PlayScene extends Phaser.Scene {
     if (!this.anims.exists('player-walk')) {
       this.anims.create({
         key: 'player-walk',
-        frames: this.anims.generateFrameNumbers('player', { start: 16, end: 23 }),
+        frames: this.anims.generateFrameNumbers('player', { start: 8, end: 11 }),
         frameRate: 10,
         repeat: -1,
       });
