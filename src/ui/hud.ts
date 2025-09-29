@@ -8,6 +8,7 @@ export type HudElements = {
   hearts: Phaser.GameObjects.Graphics;
   slotTexts: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];
   slotIcons: [Phaser.GameObjects.Image, Phaser.GameObjects.Image];
+  slotUses: [Phaser.GameObjects.Graphics, Phaser.GameObjects.Graphics];
 };
 
 export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
@@ -51,12 +52,18 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
     text.setLineSpacing(2);
     text.setScrollFactor(0);
     container.add(text);
-    return { icon, text };
+
+    const uses = scene.add.graphics();
+    uses.setScrollFactor(0);
+    container.add(uses);
+
+    return { icon, text, uses } as const;
   };
 
   const slotElements = [makeSlotElements(20, 0), makeSlotElements(160, 1)] as const;
   const slotIcons: HudElements['slotIcons'] = [slotElements[0].icon, slotElements[1].icon];
   const slotTexts: HudElements['slotTexts'] = [slotElements[0].text, slotElements[1].text];
+  const slotUses: HudElements['slotUses'] = [slotElements[0].uses, slotElements[1].uses];
 
   const controlsText = scene.add.text(
     ROOM_W - 24,
@@ -84,18 +91,18 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
 
   // initialize once so the HUD starts with correct values
   const initialInv: Inventory = [null, null];
-  drawHUD({ container, hearts, slotTexts, slotIcons }, maxHp, maxHp, initialInv);
+  drawHUD({ container, hearts, slotTexts, slotIcons, slotUses }, maxHp, maxHp, initialInv);
 
-  return { container, hearts, slotTexts, slotIcons };
+  return { container, hearts, slotTexts, slotIcons, slotUses };
 }
 
 function slotLabel(i: number, it: Item | null) {
   if (!it) return `${i + 1}: —`;
-  return `${i + 1}: ${it.label}\nUses: ${it.uses}`;
+  return `${i + 1}: ${it.label}`;
 }
 
 export function drawHUD(hud: HudElements, hp: number, maxHp: number, inv: Inventory) {
-  const { hearts, slotTexts, slotIcons } = hud;
+  const { hearts, slotTexts, slotIcons, slotUses } = hud;
 
   hearts.clear();
   for (let i = 0; i < maxHp; i += 1) {
@@ -106,10 +113,22 @@ export function drawHUD(hud: HudElements, hp: number, maxHp: number, inv: Invent
   for (let i = 0; i < slotTexts.length; i += 1) {
     const item = inv[i];
     slotTexts[i].setText(slotLabel(i, item));
+    slotUses[i].clear();
     if (item) {
       slotIcons[i].setTexture(item.icon);
       slotIcons[i].setDisplaySize(20, 20);
       slotIcons[i].setVisible(true);
+
+      if (item.uses > 0) {
+        const baseY = slotTexts[i].y + slotTexts[i].height + 10;
+        const spacing = 12;
+        const totalWidth = (item.uses - 1) * spacing;
+        const startX = slotIcons[i].x - totalWidth / 2;
+        for (let dot = 0; dot < item.uses; dot += 1) {
+          const x = startX + dot * spacing;
+          slotUses[i].fillStyle(0xfff066, 1).fillCircle(x, baseY, 4);
+        }
+      }
     } else {
       slotIcons[i].setVisible(false);
     }
