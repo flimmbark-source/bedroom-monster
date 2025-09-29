@@ -54,6 +54,7 @@ type SearchableFurniture = {
   findChance: number;
   emoji: string;
   emojiLabel: Phaser.GameObjects.Text;
+  labelOffsetY: number;
 };
 
 export class PlayScene extends Phaser.Scene {
@@ -77,6 +78,7 @@ export class PlayScene extends Phaser.Scene {
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   private furniture: SearchableFurniture[] = [];
+  private furnitureGroup!: Phaser.Physics.Arcade.Group;
   private searching = false;
   private activeFurniture: SearchableFurniture | null = null;
   private searchElapsed = 0;
@@ -128,7 +130,8 @@ export class PlayScene extends Phaser.Scene {
 
     // furniture (blocking)
 
-    const furniture = this.physics.add.staticGroup();
+    this.furnitureGroup = this.physics.add.group({ allowGravity: false });
+    const furniture = this.furnitureGroup;
     this.addFurnitureBlock(furniture, 640, 230, {
       searchable: true,
       name: 'Bed',
@@ -282,11 +285,18 @@ export class PlayScene extends Phaser.Scene {
     this.player.setDepth(10);
     this.player.anims.play('player-idle-down');
     this.physics.add.collider(this.player, furniture);
+    this.physics.add.collider(furniture, furniture);
 
     // monster
     this.monster = new Monster(this, 900, 700);
     this.monster.setDepth(10);
-    this.physics.add.collider(this.monster, furniture);
+    this.physics.add.collider(
+      this.monster,
+      furniture,
+      this.handleMonsterFurnitureCollision,
+      undefined,
+      this,
+    );
     this.physics.add.overlap(this.monster, this.player, () => {
       if (this.time.now < this.playerIFrameUntil) return;
       // contact damage once per second (simple throttle)
@@ -352,7 +362,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private addFurnitureBlock(
-    blocks: Phaser.Physics.Arcade.StaticGroup,
+    blocks: Phaser.Physics.Arcade.Group,
     x: number,
     y: number,
     options: FurnitureOptions = {}
@@ -372,8 +382,19 @@ export class PlayScene extends Phaser.Scene {
     rect.setVisible(false);
     rect.setFillStyle(0x222831, 0);
     rect.setStrokeStyle(0);
-    this.physics.add.existing(rect, true);
+    this.physics.add.existing(rect);
+    rect.setDataEnabled();
+    const body = rect.body as Phaser.Physics.Arcade.Body;
+    body.setAllowGravity(false);
+    body.setImmovable(false);
+    body.setDrag(800, 800);
+    body.setMaxSpeed(70);
+    body.setCollideWorldBounds(true);
     blocks.add(rect as any);
+
+    let sprite: Phaser.GameObjects.Image | undefined;
+    let spriteOffsetX = 0;
+    let spriteOffsetY = 0;
 
     if (spriteOptions) {
       const {
@@ -387,7 +408,7 @@ export class PlayScene extends Phaser.Scene {
         flipX = false,
         flipY = false,
       } = spriteOptions;
-      const sprite = this.add.image(x + offsetX, y + offsetY, 'furniture', frame);
+      sprite = this.add.image(x + offsetX, y + offsetY, 'furniture', frame);
       sprite.setOrigin(0.5, 0.5);
       sprite.setDepth(depth);
       sprite.setFlip(flipX, flipY);
@@ -398,7 +419,13 @@ export class PlayScene extends Phaser.Scene {
         const sy = scaleY ?? scaleX ?? 1;
         sprite.setScale(sx, sy);
       }
+      spriteOffsetX = sprite.x - rectX;
+      spriteOffsetY = sprite.y - rectY;
     }
+
+    rect.setData('spriteRef', sprite ?? null);
+    rect.setData('spriteOffsetX', spriteOffsetX);
+    rect.setData('spriteOffsetY', spriteOffsetY);
 
     if (!options.searchable) return;
 
@@ -428,6 +455,7 @@ export class PlayScene extends Phaser.Scene {
       findChance: options.findChance ?? 0.5,
       emoji,
       emojiLabel,
+      labelOffsetY: labelY - rectY,
     });
   }
 
@@ -476,6 +504,29 @@ export class PlayScene extends Phaser.Scene {
       offsetX: offsetXValue,
       offsetY: offsetYValue,
     };
+  }
+
+  private handleMonsterFurnitureCollision(
+    monsterObj: Phaser.GameObjects.GameObject,
+    furnitureObj: Phaser.GameObjects.GameObject,
+  ) {
+    const rect = furnitureObj as Phaser.GameObjects.Rectangle;
+    const furnitureBody = rect.body as Phaser.Physics.Arcade.Body | undefined;
+    const monster = monsterObj as Monster;
+    const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!furnitureBody || !monsterBody) return;
+
+    const pushVector = new Phaser.Math.Vector2(monsterBody.velocity.x, monsterBody.velocity.y);
+    if (pushVector.lengthSq() < 25) {
+      return;
+    }
+
+    pushVector.normalize().scale(60);
+
+    furnitureBody.velocity.x = Phaser.Math.Linear(furnitureBody.velocity.x, pushVector.x, 0.4);
+    furnitureBody.velocity.y = Phaser.Math.Linear(furnitureBody.velocity.y, pushVector.y, 0.4);
+
+    monster.applyPushSlow(0.3);
   }
 
   private getFurnitureScale(spriteOptions: FurnitureSpriteOptions | undefined) {
@@ -662,9 +713,27 @@ export class PlayScene extends Phaser.Scene {
     this.searchBar.setVisible(true);
   }
 
+  private updateFurnitureVisuals() {
+    if (!this.furnitureGroup) return;
+    this.furnitureGroup.children.each((child) => {
+      const rect = child as Phaser.GameObjects.Rectangle;
+      const sprite = rect.getData('spriteRef') as Phaser.GameObjects.Image | null;
+      if (sprite) {
+        const offsetX = (rect.getData('spriteOffsetX') as number) ?? 0;
+        const offsetY = (rect.getData('spriteOffsetY') as number) ?? 0;
+        sprite.setPosition(rect.x + offsetX, rect.y + offsetY);
+      }
+    });
+  }
+
   private updateFurnitureIndicators() {
     for (const furniture of this.furniture) {
       if (!furniture.emojiLabel.active) continue;
+
+      furniture.emojiLabel.setPosition(
+        furniture.rect.x,
+        furniture.rect.y + furniture.labelOffsetY,
+      );
 
       const dist = this.distanceToRectangle(this.player.x, this.player.y, furniture.rect);
       const isActive = this.activeFurniture === furniture && this.searching;
@@ -1532,6 +1601,7 @@ export class PlayScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.keyCraft)) this.craft();
     }
 
+    this.updateFurnitureVisuals();
     this.updateSearch(delta);
 
     // monster update
