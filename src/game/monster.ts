@@ -84,6 +84,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private hpBarFill: Phaser.GameObjects.Rectangle;
   private hpBarWidth = 52;
   private facing: 'up' | 'down' | 'left' | 'right' = 'down';
+  private pushSlowTimer = 0;
 
   setDepth(value: number): this {
     super.setDepth(value);
@@ -825,8 +826,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   update(dt: number, player: Phaser.Physics.Arcade.Sprite) {
     this.layoutHpBar();
+    this.pushSlowTimer = Math.max(0, this.pushSlowTimer - dt);
     const d = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
     this.state = d > 300 ? 'wander' : d > 140 ? 'chase' : 'engage';
+
+    const pushSlowFactor = this.pushSlowTimer > 0 ? 0.55 : 1;
 
     // cooldowns
     for (const k in this.cd) (this.cd as any)[k] = Math.max(0, (this.cd as any)[k] - dt);
@@ -858,11 +862,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
     // simple steering
     if (this.state === 'wander') {
-      this.scene.physics.moveToObject(this, player, this.speed * 0.6);
+      this.scene.physics.moveToObject(this, player, this.speed * 0.6 * pushSlowFactor);
     } else if (this.state === 'chase') {
-      this.scene.physics.moveToObject(this, player, this.speed * 1.0);
+      this.scene.physics.moveToObject(this, player, this.speed * 1.0 * pushSlowFactor);
     } else {
-      this.scene.physics.moveToObject(this, player, this.speed * 1.1);
+      this.scene.physics.moveToObject(this, player, this.speed * 1.1 * pushSlowFactor);
       // pick an action; each handler manages its telegraph and cooldown timing
       if (this.cd.sweep === 0) { this.sweep(player); this.cd.sweep = this.actionT.sweep; }
       else if (this.cd.smash === 0) { this.smash(player); this.cd.smash = this.actionT.smash; }
@@ -937,6 +941,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.setAngle(this.baseAngle);
     this.setTint(this.baseTint);
     this.playMovementAnimation(false);
+  }
+
+  applyPushSlow(duration = 0.3) {
+    this.pushSlowTimer = Math.max(this.pushSlowTimer, duration);
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
