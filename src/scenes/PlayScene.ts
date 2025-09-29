@@ -25,6 +25,14 @@ type FurnitureSpriteOptions = {
   flipY?: boolean;
 };
 
+type FurnitureHitboxOptions = {
+  width?: number;
+  height?: number;
+  offsetX?: number;
+  offsetY?: number;
+  units?: 'frame' | 'world';
+};
+
 type FurnitureOptions = {
   searchable?: boolean;
   name?: string;
@@ -34,6 +42,7 @@ type FurnitureOptions = {
   findChance?: number;
   emoji?: string;
   sprite?: FurnitureSpriteOptions;
+  hitbox?: FurnitureHitboxOptions;
 };
 
 type SearchableFurniture = {
@@ -120,7 +129,7 @@ export class PlayScene extends Phaser.Scene {
     // furniture (blocking)
 
     const furniture = this.physics.add.staticGroup();
-    this.addFurnitureBlock(furniture, 640, 230, 240, 190, {
+    this.addFurnitureBlock(furniture, 640, 230, {
       searchable: true,
       name: 'Bed',
       searchDuration: 2600,
@@ -133,8 +142,14 @@ export class PlayScene extends Phaser.Scene {
         depth: 2,
         scale: 0.9,
       },
+      hitbox: {
+        width: 213,
+        height: 273,
+        offsetX: -1.5,
+        offsetY: 0,
+      },
     });
-    this.addFurnitureBlock(furniture, 480, 360, 120, 70, {
+    this.addFurnitureBlock(furniture, 480, 360, {
       searchable: true,
       name: 'Nightstand',
       searchDuration: 2000,
@@ -147,8 +162,14 @@ export class PlayScene extends Phaser.Scene {
         depth: 2,
         scale: 0.65,
       },
+      hitbox: {
+        width: 95,
+        height: 153,
+        offsetX: 1,
+        offsetY: 0.5,
+      },
     });
-    this.addFurnitureBlock(furniture, 800, 360, 120, 70, {
+    this.addFurnitureBlock(furniture, 800, 360, {
       searchable: true,
       name: 'Nightstand',
       searchDuration: 2000,
@@ -162,8 +183,14 @@ export class PlayScene extends Phaser.Scene {
         scale: 0.65,
         flipX: true,
       },
+      hitbox: {
+        width: 95,
+        height: 153,
+        offsetX: 1,
+        offsetY: 0.5,
+      },
     });
-    this.addFurnitureBlock(furniture, 1060, 280, 200, 90, {
+    this.addFurnitureBlock(furniture, 1060, 280, {
       searchable: true,
       name: 'Desk',
       searchDuration: 2200,
@@ -176,8 +203,13 @@ export class PlayScene extends Phaser.Scene {
         depth: 2,
         scale: 0.9,
       },
+      hitbox: {
+        width: 204,
+        height: 123,
+        offsetX: 1.5,
+      },
     });
-    this.addFurnitureBlock(furniture, 280, 560, 160, 90, {
+    this.addFurnitureBlock(furniture, 280, 560, {
       searchable: true,
       name: 'Dresser',
       searchDuration: 2400,
@@ -190,8 +222,14 @@ export class PlayScene extends Phaser.Scene {
         depth: 2,
         scale: 0.85,
       },
+      hitbox: {
+        width: 95,
+        height: 153,
+        offsetX: 1,
+        offsetY: 0.5,
+      },
     });
-    this.addFurnitureBlock(furniture, 960, 580, 220, 90, {
+    this.addFurnitureBlock(furniture, 960, 580, {
       searchable: true,
       name: 'Vanity',
       searchDuration: 2100,
@@ -205,14 +243,24 @@ export class PlayScene extends Phaser.Scene {
         scale: 0.8,
         flipX: true,
       },
+      hitbox: {
+        width: 204,
+        height: 123,
+        offsetX: 1.5,
+      },
     });
-    this.addFurnitureBlock(furniture, 640, 360, 380, 60, {
+    this.addFurnitureBlock(furniture, 640, 360, {
       sprite: {
         frame: 'rug',
         offsetY: -20,
         depth: 1,
         scaleX: 1.45,
         scaleY: 1,
+      },
+      hitbox: {
+        width: 213,
+        height: 60,
+        offsetY: -32,
       },
     }); // rug edge (as blocker for proto)
 
@@ -307,18 +355,27 @@ export class PlayScene extends Phaser.Scene {
     blocks: Phaser.Physics.Arcade.StaticGroup,
     x: number,
     y: number,
-    w: number,
-    h: number,
     options: FurnitureOptions = {}
   ) {
-    const rect = this.add.rectangle(x, y, w, h, 0x222831).setStrokeStyle(1, 0x3a4152);
+    const spriteOptions = options.sprite;
+    const { width, height, offsetX, offsetY } = this.resolveFurnitureHitbox(
+      spriteOptions,
+      options.hitbox
+    );
+
+    const rectX = x + (spriteOptions?.offsetX ?? 0) + offsetX;
+    const rectY = y + (spriteOptions?.offsetY ?? 0) + offsetY;
+
+    const rect = this.add
+      .rectangle(rectX, rectY, width, height, 0x222831)
+      .setStrokeStyle(1, 0x3a4152);
     rect.setVisible(false);
     rect.setFillStyle(0x222831, 0);
     rect.setStrokeStyle(0);
     this.physics.add.existing(rect, true);
     blocks.add(rect as any);
 
-    if (options.sprite) {
+    if (spriteOptions) {
       const {
         frame,
         offsetX = 0,
@@ -329,7 +386,7 @@ export class PlayScene extends Phaser.Scene {
         scaleY,
         flipX = false,
         flipY = false,
-      } = options.sprite;
+      } = spriteOptions;
       const sprite = this.add.image(x + offsetX, y + offsetY, 'furniture', frame);
       sprite.setOrigin(0.5, 0.5);
       sprite.setDepth(depth);
@@ -351,9 +408,9 @@ export class PlayScene extends Phaser.Scene {
 
     const name = options.name ?? 'Furniture';
     const emoji = options.emoji ?? this.getFurnitureEmoji(name);
-    const labelY = y - h / 2 - 10;
+    const labelY = rectY - height / 2 - 10;
     const emojiLabel = this.add
-      .text(x, labelY, emoji, {
+      .text(rectX, labelY, emoji, {
         fontFamily: 'monospace',
         fontSize: '20px',
       })
@@ -372,6 +429,70 @@ export class PlayScene extends Phaser.Scene {
       emoji,
       emojiLabel,
     });
+  }
+
+  private resolveFurnitureHitbox(
+    spriteOptions: FurnitureSpriteOptions | undefined,
+    hitbox: FurnitureHitboxOptions | undefined
+  ) {
+    const { scaleX, scaleY } = this.getFurnitureScale(spriteOptions);
+    const texture = spriteOptions?.frame ? this.textures.get('furniture') : null;
+    const frame =
+      spriteOptions?.frame && texture?.has(spriteOptions.frame)
+        ? texture.get(spriteOptions.frame)
+        : null;
+
+    const fallbackFrameWidth = frame?.width ?? 64;
+    const fallbackFrameHeight = frame?.height ?? 64;
+    const units = hitbox?.units ?? 'frame';
+
+    const widthValue =
+      units === 'world'
+        ? hitbox?.width ?? fallbackFrameWidth * scaleX
+        : (hitbox?.width ?? fallbackFrameWidth) * scaleX;
+    const heightValue =
+      units === 'world'
+        ? hitbox?.height ?? fallbackFrameHeight * scaleY
+        : (hitbox?.height ?? fallbackFrameHeight) * scaleY;
+
+    let offsetXValue =
+      units === 'world'
+        ? hitbox?.offsetX ?? 0
+        : (hitbox?.offsetX ?? 0) * scaleX;
+    let offsetYValue =
+      units === 'world'
+        ? hitbox?.offsetY ?? 0
+        : (hitbox?.offsetY ?? 0) * scaleY;
+
+    if (spriteOptions?.flipX) offsetXValue *= -1;
+    if (spriteOptions?.flipY) offsetYValue *= -1;
+
+    const width = Math.max(1, Math.abs(widthValue));
+    const height = Math.max(1, Math.abs(heightValue));
+
+    return {
+      width,
+      height,
+      offsetX: offsetXValue,
+      offsetY: offsetYValue,
+    };
+  }
+
+  private getFurnitureScale(spriteOptions: FurnitureSpriteOptions | undefined) {
+    const baseScale =
+      typeof spriteOptions?.scale === 'number' ? spriteOptions.scale : 1;
+    const scaleX = Math.abs(
+      typeof spriteOptions?.scaleX === 'number'
+        ? spriteOptions.scaleX
+        : baseScale
+    );
+    const scaleY = Math.abs(
+      typeof spriteOptions?.scaleY === 'number'
+        ? spriteOptions.scaleY
+        : baseScale
+    );
+
+    return { scaleX, scaleY };
   }
 
   private getFurnitureEmoji(name: string) {
