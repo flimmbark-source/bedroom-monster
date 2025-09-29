@@ -1098,7 +1098,7 @@ export class PlayScene extends Phaser.Scene {
       if (this.cursors.down?.isDown) body.setVelocityY(speed);
     }
 
-    const moving = body.velocity.lengthSq() > 0;
+    const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
     this.player.anims.play(moving ? 'player-walk' : 'player-idle', true);
 
     const overItem: GroundItem | null = (this as any)._overItem || null;

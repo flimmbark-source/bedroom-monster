@@ -589,7 +589,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (!this.actionLock && this.body) {
-      const moving = (this.body.velocity.lengthSq && this.body.velocity.lengthSq() > 16) || this.body.speed > 4;
+      const body = this.body as Phaser.Physics.Arcade.Body;
+      const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
       this.anims.play(moving ? 'monster-walk' : 'monster-idle', true);
     }
 
