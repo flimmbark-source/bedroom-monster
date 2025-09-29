@@ -28,7 +28,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   cd = { sweep: 0, smash: 0, rush: 0, roar: 0 };
   speed = 140;
   target?: Phaser.Types.Physics.Arcade.GameObjectWithBody;
-  private baseTint = 0xff8844;
+  private baseTint = 0xffffff;
   private baseScale = { x: 1, y: 1 };
   private baseAngle = 0;
   private actionLock = false;
@@ -536,12 +536,15 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'monster-circle');
+    super(scene, x, y, 'monster', 0);
     scene.add.existing(this);
     scene.physics.add.existing(this);
-    this.setDisplaySize(40, 40);
-    this.setCircle(18, 2, 2);
-    this.setTintFill(this.baseTint);
+    this.setScale(0.45);
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    body.setCircle(30, 34, 54);
+    this.setCollideWorldBounds(true);
+    this.anims.play('monster-idle');
+    this.baseScale = { x: this.scaleX, y: this.scaleY };
 
     // HP bar visuals hover above the monster and track its current health.
     const barY = this.getHpBarY();
@@ -556,8 +559,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     // Gentle idle breathing so the monster feels alive between actions.
     this.idleTween = scene.tweens.add({
       targets: this,
-      scaleX: { from: 1, to: 1.04 },
-      scaleY: { from: 1, to: 0.96 },
+      scaleX: { from: this.baseScale.x, to: this.baseScale.x * 1.04 },
+      scaleY: { from: this.baseScale.y, to: this.baseScale.y * 0.96 },
       duration: 900,
       yoyo: true,
       repeat: -1,
@@ -583,6 +586,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         this.resetPose();
         this.idleTween?.resume();
       }
+    }
+
+    if (!this.actionLock && this.body) {
+      const moving = (this.body.velocity.lengthSq && this.body.velocity.lengthSq() > 16) || this.body.speed > 4;
+      this.anims.play(moving ? 'monster-walk' : 'monster-idle', true);
     }
 
     if (this.actionLock) return;
@@ -639,6 +647,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.setVelocity(0, 0);
     this.currentChain?.stop();
     this.idleTween?.pause();
+    this.anims.stop();
 
     const telegraphTweens = Array.isArray(config.telegraph) ? config.telegraph : [config.telegraph];
     const attackTweens = Array.isArray(config.attack) ? config.attack : [config.attack];
@@ -664,6 +673,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.setScale(this.baseScale.x, this.baseScale.y);
     this.setAngle(this.baseAngle);
     this.setTint(this.baseTint);
+    this.anims.play('monster-idle', true);
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
@@ -915,17 +925,6 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       duration,
       ease: 'Sine.easeOut',
       onComplete: () => icon.destroy(),
-    });
-  }
-
-  private enterCooldownPose(tint: number) {
-    this.setTint(tint);
-    this.scene.tweens.add({
-      targets: this,
-      scaleX: { from: this.scaleX, to: 0.94 },
-      scaleY: { from: this.scaleY, to: 1.06 },
-      duration: 160,
-      ease: 'Sine.easeOut',
     });
   }
 
