@@ -6,6 +6,7 @@ export type Item = {
   id: ItemId;
   label: string;
   uses: number;
+  icon: string;
   data?: Record<string, unknown>;
 };
 
