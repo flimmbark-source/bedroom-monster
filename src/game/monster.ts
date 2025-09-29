@@ -86,7 +86,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       this.scene.physics.moveToObject(this, player, this.speed * 1.0);
     } else {
       this.scene.physics.moveToObject(this, player, this.speed * 1.1);
-      // try an action (telegraph not yet visualized; placeholder effects)
+      // pick an action; each handler manages its telegraph and cooldown timing
       if (this.cd.sweep === 0) { this.sweep(player); this.cd.sweep = this.actionT.sweep; }
       else if (this.cd.smash === 0) { this.smash(player); this.cd.smash = this.actionT.smash; }
       else if (this.cd.rush === 0) { this.rush(player); this.cd.rush = this.actionT.rush; }
@@ -119,8 +119,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   private startAction(
-    action: 'sweep'|'smash'|'rush'|'roar',
-    tweens: Phaser.Types.Tweens.TweenBuilderConfig | Phaser.Types.Tweens.TweenBuilderConfig[]
+    config: {
+      telegraph: Phaser.Types.Tweens.TweenBuilderConfig | Phaser.Types.Tweens.TweenBuilderConfig[];
+      attack: Phaser.Types.Tweens.TweenBuilderConfig | Phaser.Types.Tweens.TweenBuilderConfig[];
+      cooldown: { duration: number; onStart?: () => void };
+    }
   ) {
     if (this.actionLock) return;
 
@@ -129,16 +132,22 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.currentChain?.stop();
     this.idleTween?.pause();
 
-    const timelineTweens = Array.isArray(tweens) ? tweens : [tweens];
+    const telegraphTweens = Array.isArray(config.telegraph) ? config.telegraph : [config.telegraph];
+    const attackTweens = Array.isArray(config.attack) ? config.attack : [config.attack];
+
+    const sequence = [...telegraphTweens, ...attackTweens];
 
     this.currentChain = this.scene.tweens.chain({
       targets: this,
-      tweens: timelineTweens,
+      tweens: sequence,
       onComplete: () => {
-        this.resetPose();
-        this.actionLock = false;
         this.currentChain = undefined;
-        this.idleTween?.resume();
+        config.cooldown.onStart?.();
+        this.scene.time.delayedCall(config.cooldown.duration, () => {
+          this.resetPose();
+          this.actionLock = false;
+          this.idleTween?.resume();
+        });
       },
     });
   }
@@ -150,128 +159,188 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
-    this.showSweepTelegraph(player, 120, 0xffbb55, '🌀', 360);
-    this.startAction('sweep', [
-      {
-        duration: 200,
-        scaleX: 0.9,
-        scaleY: 1.1,
-        angle: -15,
+    this.startAction({
+      telegraph: {
+        duration: 360,
+        scaleX: 0.88,
+        scaleY: 1.18,
+        angle: -22,
         ease: 'Sine.easeOut',
-        onStart: () => this.setTint(0xffbb55),
-      },
-      {
-        duration: 220,
-        scaleX: 1.35,
-        scaleY: 0.75,
-        angle: 20,
-        ease: 'Back.easeOut',
         onStart: () => {
-          if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) < 80) {
-            player.emit('hit', { dmg: 1, type: 'sweep' });
-            this.spawnImpactEmoji(player.x, player.y - 20, '💫', 0xffd18a);
-          }
+          this.setTint(0xffbb55);
+          this.showSweepTelegraph(player, 120, 0xffbb55, '🌀', 420);
+          this.spawnImpactEmoji(this.x, this.y - 36, '🌀', 0xffe6b3, 420);
         },
       },
-      {
-        duration: 180,
-        scaleX: this.baseScale.x,
-        scaleY: this.baseScale.y,
-        angle: this.baseAngle,
-        ease: 'Sine.easeInOut',
+      attack: [
+        {
+          duration: 220,
+          scaleX: 1.36,
+          scaleY: 0.74,
+          angle: 24,
+          ease: 'Back.easeOut',
+          onStart: () => {
+            if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) < 80) {
+              player.emit('hit', { dmg: 1, type: 'sweep' });
+              this.spawnImpactEmoji(player.x, player.y - 20, '💫', 0xffd18a);
+            }
+          },
+        },
+        {
+          duration: 200,
+          scaleX: this.baseScale.x,
+          scaleY: this.baseScale.y,
+          angle: this.baseAngle,
+          ease: 'Sine.easeInOut',
+        },
+      ],
+      cooldown: {
+        duration: 360,
+        onStart: () => this.enterCooldownPose(0xffa95a),
       },
-    ]);
+    });
   }
   smash(player: Phaser.Physics.Arcade.Sprite) {
-    this.showSmashTelegraph(player, 130, 0xffcc77, '🔨', 380);
-    this.startAction('smash', [
-      {
-        duration: 260,
-        scaleX: 0.8,
-        scaleY: 1.2,
-        ease: 'Quad.easeOut',
-        onStart: () => this.setTint(0xffcc77),
-      },
-      {
-        duration: 160,
-        scaleX: 1.4,
-        scaleY: 0.7,
-        ease: 'Bounce.easeOut',
-        onStart: () => {
-          if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) < 120) {
-            player.emit('hit', { dmg: 1, type: 'smash' });
-            this.spawnImpactEmoji(player.x, player.y - 26, '💥', 0xfff2c6);
-          }
+    this.startAction({
+      telegraph: [
+        {
+          duration: 220,
+          scaleX: 1.08,
+          scaleY: 0.92,
+          ease: 'Quad.easeOut',
+          onStart: () => {
+            this.setTint(0xffcc77);
+            this.showSmashTelegraph(player, 130, 0xffcc77, '🔨', 420);
+            this.spawnImpactEmoji(this.x, this.y - 44, '💢', 0xfff2c6, 420);
+          },
         },
+        {
+          duration: 180,
+          scaleX: 0.82,
+          scaleY: 1.22,
+          ease: 'Quad.easeIn',
+        },
+      ],
+      attack: [
+        {
+          duration: 180,
+          scaleX: 1.42,
+          scaleY: 0.7,
+          ease: 'Bounce.easeOut',
+          onStart: () => {
+            if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) < 120) {
+              player.emit('hit', { dmg: 1, type: 'smash' });
+              this.spawnImpactEmoji(player.x, player.y - 26, '💥', 0xfff2c6);
+            }
+          },
+        },
+        {
+          duration: 220,
+          scaleX: this.baseScale.x,
+          scaleY: this.baseScale.y,
+          angle: this.baseAngle,
+          ease: 'Sine.easeInOut',
+        },
+      ],
+      cooldown: {
+        duration: 480,
+        onStart: () => this.enterCooldownPose(0xffb067),
       },
-      {
-        duration: 200,
-        scaleX: this.baseScale.x,
-        scaleY: this.baseScale.y,
-        angle: this.baseAngle,
-        ease: 'Sine.easeInOut',
-      },
-    ]);
+    });
   }
   rush(player: Phaser.Physics.Arcade.Sprite) {
-    this.showRushTelegraph(player, 280, 0xeeaa55, '⚡', 360);
-    this.startAction('rush', [
-      {
-        duration: 220,
-        scaleX: 0.85,
-        scaleY: 1.2,
-        ease: 'Sine.easeIn',
-        onStart: () => this.setTint(0xeeaa55),
-      },
-      {
-        duration: 100,
-        scaleX: 1.5,
-        scaleY: 0.7,
-        ease: 'Expo.easeOut',
-        onStart: () => {
-          const v = this.scene.physics.velocityFromRotation(
-            Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y), 340);
-          this.setVelocity(v.x, v.y);
+    this.startAction({
+      telegraph: [
+        {
+          duration: 200,
+          scaleX: 0.9,
+          scaleY: 1.16,
+          ease: 'Quad.easeOut',
+          onStart: () => {
+            this.setTint(0xeeaa55);
+            this.showRushTelegraph(player, 280, 0xeeaa55, '⚡', 400);
+            this.spawnImpactEmoji(this.x, this.y - 34, '👣', 0xffe6bb, 360);
+          },
         },
+        {
+          duration: 160,
+          scaleX: 1.04,
+          scaleY: 0.94,
+          ease: 'Sine.easeInOut',
+        },
+      ],
+      attack: [
+        {
+          duration: 120,
+          scaleX: 1.48,
+          scaleY: 0.72,
+          ease: 'Expo.easeOut',
+          onStart: () => {
+            const v = this.scene.physics.velocityFromRotation(
+              Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y), 340);
+            this.setVelocity(v.x, v.y);
+          },
+        },
+        {
+          duration: 260,
+          scaleX: this.baseScale.x,
+          scaleY: this.baseScale.y,
+          ease: 'Quad.easeOut',
+          onStart: () => this.scene.time.delayedCall(80, () => this.setVelocity(0, 0)),
+          onComplete: () => this.spawnImpactEmoji(this.x, this.y - 28, '💢', 0xffe0b3),
+        },
+      ],
+      cooldown: {
+        duration: 420,
+        onStart: () => this.enterCooldownPose(0xeeaa55),
       },
-      {
-        duration: 240,
-        scaleX: this.baseScale.x,
-        scaleY: this.baseScale.y,
-        ease: 'Quad.easeOut',
-        onStart: () => this.scene.time.delayedCall(60, () => this.setVelocity(0, 0)),
-        onComplete: () => this.spawnImpactEmoji(this.x, this.y - 28, '💢', 0xffe0b3),
-      },
-    ]);
+    });
   }
   roar(player: Phaser.Physics.Arcade.Sprite) {
-    this.showRoarTelegraph(190, 0xffdd88, '🗯️', 420);
-    this.startAction('roar', [
-      {
-        duration: 180,
-        scaleX: 1.05,
-        scaleY: 1.05,
-        ease: 'Sine.easeInOut',
-        onStart: () => this.setTintFill(0xffdd88),
-      },
-      {
-        duration: 180,
-        scaleX: 1.15,
-        scaleY: 1.15,
-        ease: 'Sine.easeInOut',
-        onStart: () => {
-          player.emit('hit', { dmg: 0, type: 'roar' });
-          this.spawnImpactEmoji(player.x, player.y - 34, '😱', 0xfff2c6);
+    this.startAction({
+      telegraph: [
+        {
+          duration: 240,
+          scaleX: 0.96,
+          scaleY: 1.12,
+          ease: 'Sine.easeInOut',
+          onStart: () => {
+            this.setTintFill(0xffdd88);
+            this.showRoarTelegraph(190, 0xffdd88, '🗯️', 440);
+            this.spawnImpactEmoji(this.x, this.y - 48, '😤', 0xfff2c6, 440);
+          },
         },
+        {
+          duration: 200,
+          scaleX: 1.08,
+          scaleY: 1.12,
+          ease: 'Sine.easeIn',
+        },
+      ],
+      attack: [
+        {
+          duration: 200,
+          scaleX: 1.18,
+          scaleY: 1.18,
+          ease: 'Sine.easeOut',
+          onStart: () => {
+            player.emit('hit', { dmg: 0, type: 'roar' });
+            this.spawnImpactEmoji(player.x, player.y - 34, '😱', 0xfff2c6);
+          },
+        },
+        {
+          duration: 200,
+          scaleX: this.baseScale.x,
+          scaleY: this.baseScale.y,
+          ease: 'Sine.easeOut',
+          onStart: () => this.setTint(this.baseTint),
+        },
+      ],
+      cooldown: {
+        duration: 360,
+        onStart: () => this.enterCooldownPose(this.baseTint),
       },
-      {
-        duration: 180,
-        scaleX: this.baseScale.x,
-        scaleY: this.baseScale.y,
-        ease: 'Sine.easeOut',
-        onStart: () => this.setTint(this.baseTint),
-      },
-    ]);
+    });
   }
 
   private showSweepTelegraph(
@@ -481,7 +550,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
 
-  private spawnImpactEmoji(x: number, y: number, emoji: string, tint: number) {
+  private spawnImpactEmoji(x: number, y: number, emoji: string, tint: number, duration = 420) {
     const icon = this.scene.add.text(x, y, emoji, { fontSize: '26px' })
       .setOrigin(0.5)
       .setDepth(this.telegraphDepth + 2);
@@ -491,9 +560,20 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       targets: icon,
       alpha: { from: 1, to: 0 },
       y: y - 18,
-      duration: 420,
+      duration,
       ease: 'Sine.easeOut',
       onComplete: () => icon.destroy(),
+    });
+  }
+
+  private enterCooldownPose(tint: number) {
+    this.setTint(tint);
+    this.scene.tweens.add({
+      targets: this,
+      scaleX: { from: this.scaleX, to: 0.94 },
+      scaleY: { from: this.scaleY, to: 1.06 },
+      duration: 160,
+      ease: 'Sine.easeOut',
     });
   }
 }
