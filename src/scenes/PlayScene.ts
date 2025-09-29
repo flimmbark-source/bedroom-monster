@@ -114,7 +114,7 @@ export class PlayScene extends Phaser.Scene {
     // furniture (blocking)
 
     const furniture = this.physics.add.staticGroup();
-    this.addFurnitureBlock(furniture, 320, 180, 360, 40, {
+    this.addFurnitureBlock(furniture, 280, 200, 360, 40, {
       searchable: true,
       name: 'Bed',
       searchDuration: 2600,
@@ -128,7 +128,7 @@ export class PlayScene extends Phaser.Scene {
         scale: 1.3,
       },
     });
-    this.addFurnitureBlock(furniture, 320, 240, 360, 40, {
+    this.addFurnitureBlock(furniture, 280, 260, 360, 40, {
       searchable: true,
       name: 'Bed',
       searchDuration: 2600,
@@ -136,21 +136,7 @@ export class PlayScene extends Phaser.Scene {
       findChance: 0.5,
       emoji: '🛏️',
     });
-    this.addFurnitureBlock(furniture, 260, 540, 220, 60, {
-      searchable: true,
-      name: 'Desk',
-      searchDuration: 2200,
-      checkPoints: [0.75, 0.4],
-      findChance: 0.6,
-      emoji: '🪑',
-      sprite: {
-        frame: 'desk',
-        offsetY: -20,
-        depth: 2,
-        scale: 1.2,
-      },
-    });
-    this.addFurnitureBlock(furniture, 1040, 520, 160, 60, {
+    this.addFurnitureBlock(furniture, 980, 200, 160, 60, {
       searchable: true,
       name: 'Dresser',
       searchDuration: 2400,
@@ -164,10 +150,24 @@ export class PlayScene extends Phaser.Scene {
         scale: 1.4,
       },
     });
-    this.addFurnitureBlock(furniture, 700, 640, 420, 40, {
+    this.addFurnitureBlock(furniture, 940, 520, 220, 60, {
+      searchable: true,
+      name: 'Desk',
+      searchDuration: 2200,
+      checkPoints: [0.75, 0.4],
+      findChance: 0.6,
+      emoji: '🪑',
+      sprite: {
+        frame: 'desk',
+        offsetY: -20,
+        depth: 2,
+        scale: 1.2,
+      },
+    });
+    this.addFurnitureBlock(furniture, 640, 420, 420, 40, {
       sprite: {
         frame: 'rug',
-        offsetY: 10,
+        offsetY: 0,
         depth: 1,
         scaleX: 2,
         scaleY: 1,
