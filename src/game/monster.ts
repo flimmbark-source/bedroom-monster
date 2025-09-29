@@ -13,11 +13,54 @@ type TelegraphTimings = {
   recovery: number;
 };
 
+type TelegraphPhase = 'preWarn' | 'windUp' | 'commit' | 'recovery' | 'done';
+
+type AttackType = 'sweep' | 'smash' | 'rush' | 'roar';
+
+type AttackPriority = 'rush' | 'smash' | 'sweep' | 'roar';
+
+const PRIORITY_VALUE: Record<AttackPriority, number> = {
+  rush: 3,
+  smash: 2,
+  sweep: 1,
+  roar: 0,
+};
+
+export type TelegraphImpact = {
+  type: AttackType;
+  damage: number;
+  slowMultiplier?: number;
+  slowDuration?: number;
+  knockback?: number;
+  screenShake?: { duration: number; intensity: number };
+};
+
+type ActiveTelegraph = {
+  id: string;
+  type: AttackType;
+  priority: AttackPriority;
+  phase: TelegraphPhase;
+  timings: TelegraphTimings;
+  hasHitPlayer: boolean;
+  containsPoint: (x: number, y: number) => boolean;
+  impact: TelegraphImpact;
+  setPhase: (phase: TelegraphPhase) => void;
+  destroy: () => void;
+};
+
 type TelegraphHandle = {
   startPreWarn: () => void;
   startWindUp: () => void;
   startCommit: () => void;
   startRecovery: () => void;
+  destroy: () => void;
+  telegraph: ActiveTelegraph;
+};
+
+export type TelegraphHitCandidate = {
+  id: string;
+  priority: AttackPriority;
+  impact: TelegraphImpact;
 };
 
 export class Monster extends Phaser.Physics.Arcade.Sprite {
@@ -35,6 +78,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private currentChain?: Phaser.Tweens.TweenChain;
   private idleTween?: Phaser.Tweens.Tween;
   private telegraphDepth = 90;
+  private activeTelegraphs = new Map<string, ActiveTelegraph>();
+  private telegraphSeq = 0;
   private hpBarBg: Phaser.GameObjects.Rectangle;
   private hpBarFill: Phaser.GameObjects.Rectangle;
   private hpBarWidth = 52;
@@ -70,12 +115,76 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.anims.play(this.movementAnimKey(moving), true);
   }
 
+  private registerTelegraph(
+    type: AttackType,
+    priority: AttackPriority,
+    timings: TelegraphTimings,
+    containsPoint: (x: number, y: number) => boolean,
+    impact: TelegraphImpact,
+    cleanup: () => void,
+  ): ActiveTelegraph {
+    const id = `${type}-${++this.telegraphSeq}`;
+    const telegraph: ActiveTelegraph = {
+      id,
+      type,
+      priority,
+      phase: 'preWarn',
+      timings,
+      hasHitPlayer: false,
+      containsPoint,
+      impact,
+      setPhase: (phase: TelegraphPhase) => {
+        telegraph.phase = phase;
+        if (phase === 'commit') {
+          telegraph.hasHitPlayer = false;
+        }
+        if (phase === 'done') {
+          this.activeTelegraphs.delete(id);
+        }
+      },
+      destroy: () => {
+        telegraph.setPhase('done');
+        cleanup();
+      },
+    };
+    this.activeTelegraphs.set(id, telegraph);
+    return telegraph;
+  }
+
+  getTelegraphHitCandidates(player: Phaser.Physics.Arcade.Sprite): TelegraphHitCandidate[] {
+    const px = player.x;
+    const py = player.y;
+    const results: TelegraphHitCandidate[] = [];
+    this.activeTelegraphs.forEach((telegraph) => {
+      if (telegraph.phase !== 'commit' || telegraph.hasHitPlayer) return;
+      if (!telegraph.containsPoint(px, py)) return;
+      results.push({
+        id: telegraph.id,
+        priority: telegraph.priority,
+        impact: telegraph.impact,
+      });
+    });
+    return results;
+  }
+
+  resolveTelegraphHit(id: string) {
+    const telegraph = this.activeTelegraphs.get(id);
+    if (telegraph) {
+      telegraph.hasHitPlayer = true;
+    }
+  }
+
+  resolveTelegraphHits(ids: string[]) {
+    ids.forEach((id) => this.resolveTelegraphHit(id));
+  }
+
   private showSweepTelegraph(
     player: Phaser.Physics.Arcade.Sprite,
     range: number,
     timings: TelegraphTimings,
   ): TelegraphHandle {
-    const spread = Phaser.Math.DegToRad(150);
+    const spread = Phaser.Math.DegToRad(120);
+    const halfSpread = spread / 2;
     const baseDepth = Math.min(this.telegraphDepth, this.depth - 2);
     const outlineDepth = baseDepth + 6;
     const fill = this.scene.add.graphics({ x: this.x, y: this.y }).setDepth(baseDepth);
@@ -86,6 +195,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       strokeAlpha: 0.7,
       strokeWidth: 5,
     };
+    let lockedAngle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+    let trackingRotation = true;
     let pulse: Phaser.Tweens.Tween | undefined;
     let updateHandler: (() => void) | undefined;
 
@@ -94,23 +205,35 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       fill.fillStyle(state.color, state.fillAlpha);
       fill.beginPath();
       fill.moveTo(0, 0);
-      fill.arc(0, 0, range, -spread / 2, spread / 2, false);
+      fill.arc(0, 0, range, -halfSpread, halfSpread, false);
       fill.closePath();
       fill.fillPath();
 
       outline.clear();
       outline.lineStyle(state.strokeWidth, state.color, state.strokeAlpha);
       outline.beginPath();
-      outline.arc(0, 0, range, -spread / 2, spread / 2, false);
+      outline.arc(0, 0, range, -halfSpread, halfSpread, false);
       outline.strokePath();
     };
 
+    const containsPoint = (px: number, py: number) => {
+      const dx = px - this.x;
+      const dy = py - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > range) return false;
+      const angle = Math.atan2(dy, dx);
+      const diff = Math.abs(Phaser.Math.Angle.Wrap(angle - lockedAngle));
+      return diff <= halfSpread;
+    };
+
     const updatePositions = () => {
-      const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+      if (trackingRotation) {
+        lockedAngle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+      }
       fill.setPosition(this.x, this.y);
       outline.setPosition(this.x, this.y);
-      fill.setRotation(angle);
-      outline.setRotation(angle);
+      fill.setRotation(lockedAngle);
+      outline.setRotation(lockedAngle);
     };
 
     draw();
@@ -136,8 +259,25 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       outline.destroy();
     };
 
+    const telegraph = this.registerTelegraph(
+      'sweep',
+      'sweep',
+      timings,
+      containsPoint,
+      {
+        type: 'sweep',
+        damage: 1,
+        knockback: 90,
+        screenShake: { duration: 80, intensity: 0.004 },
+      },
+      cleanup,
+    );
+
     return {
+      telegraph,
+      destroy: () => telegraph.destroy(),
       startPreWarn: () => {
+        telegraph.setPhase('preWarn');
         stopPulse();
         state.color = TELEGRAPH_COLORS.preWarn;
         state.fillAlpha = 0.4;
@@ -146,6 +286,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         draw();
       },
       startWindUp: () => {
+        telegraph.setPhase('windUp');
+        trackingRotation = false;
         state.color = TELEGRAPH_COLORS.windUp;
         state.fillAlpha = 0.65;
         state.strokeAlpha = 0.95;
@@ -168,11 +310,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         });
       },
       startCommit: () => {
+        telegraph.setPhase('commit');
         stopPulse();
-        if (updateHandler) {
-          this.scene.events.off('update', updateHandler);
-          updateHandler = undefined;
-        }
         state.color = TELEGRAPH_COLORS.commit;
         state.fillAlpha = 1;
         state.strokeAlpha = 1;
@@ -187,6 +326,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         });
       },
       startRecovery: () => {
+        telegraph.setPhase('recovery');
         stopPulse();
         state.color = TELEGRAPH_COLORS.recovery;
         draw();
@@ -197,7 +337,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           duration: 250,
           ease: 'Sine.easeIn',
           onUpdate: draw,
-          onComplete: cleanup,
+          onComplete: () => telegraph.destroy(),
         });
       },
     };
@@ -219,16 +359,27 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     const target = { scale: 0.75 };
     let pulse: Phaser.Tweens.Tween | undefined;
     let tracking = true;
+    let lockedCenter = new Phaser.Math.Vector2(this.x, this.y);
 
     const updatePosition = () => {
-      const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
-      const dist = Math.min(range, Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y));
-      const cx = this.x + Math.cos(angle) * dist * 0.55;
-      const cy = this.y + Math.sin(angle) * dist * 0.55;
-      fill.setPosition(cx, cy);
-      outline.setPosition(cx, cy);
+      if (tracking) {
+        const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+        const dist = Math.min(range, Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y));
+        lockedCenter = new Phaser.Math.Vector2(
+          this.x + Math.cos(angle) * dist * 0.55,
+          this.y + Math.sin(angle) * dist * 0.55,
+        );
+      }
+      fill.setPosition(lockedCenter.x, lockedCenter.y);
+      outline.setPosition(lockedCenter.x, lockedCenter.y);
       fill.setScale(target.scale);
       outline.setScale(target.scale);
+    };
+
+    const containsPoint = (px: number, py: number) => {
+      const dx = px - lockedCenter.x;
+      const dy = py - lockedCenter.y;
+      return dx * dx + dy * dy <= range * range;
     };
 
     const updateHandler = () => updatePosition();
@@ -243,17 +394,31 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
     const cleanup = () => {
       stopPulse();
-      if (tracking) {
-        this.scene.events.off('update', updateHandler);
-      }
+      this.scene.events.off('update', updateHandler);
       fill.destroy();
       outline.destroy();
     };
 
     updatePosition();
 
+    const telegraph = this.registerTelegraph(
+      'smash',
+      'smash',
+      timings,
+      containsPoint,
+      {
+        type: 'smash',
+        damage: 1,
+        screenShake: { duration: 110, intensity: 0.008 },
+      },
+      cleanup,
+    );
+
     return {
+      telegraph,
+      destroy: () => telegraph.destroy(),
       startPreWarn: () => {
+        telegraph.setPhase('preWarn');
         stopPulse();
         target.scale = 0.75;
         fill.setFillStyle(TELEGRAPH_COLORS.preWarn, 0.4);
@@ -267,6 +432,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         });
       },
       startWindUp: () => {
+        telegraph.setPhase('windUp');
+        tracking = false;
         fill.setFillStyle(TELEGRAPH_COLORS.windUp, 0.65);
         outline.setStrokeStyle(9, TELEGRAPH_COLORS.windUp, 0.95);
         stopPulse();
@@ -281,11 +448,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         });
       },
       startCommit: () => {
+        telegraph.setPhase('commit');
         stopPulse();
-        if (tracking) {
-          this.scene.events.off('update', updateHandler);
-          tracking = false;
-        }
         fill.setFillStyle(TELEGRAPH_COLORS.commit, 0.95);
         outline.setStrokeStyle(10, TELEGRAPH_COLORS.commit, 1);
         fill.setAlpha(1);
@@ -299,6 +463,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         });
       },
       startRecovery: () => {
+        telegraph.setPhase('recovery');
         stopPulse();
         fill.setFillStyle(TELEGRAPH_COLORS.recovery, 0.6);
         outline.setStrokeStyle(8, TELEGRAPH_COLORS.recovery, 0.8);
@@ -309,7 +474,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           alpha: { from: 0.7, to: 0 },
           duration: 250,
           ease: 'Sine.easeIn',
-          onComplete: cleanup,
+          onComplete: () => telegraph.destroy(),
         });
       },
     };
@@ -320,7 +485,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     maxDistance: number,
     timings: TelegraphTimings,
   ): TelegraphHandle {
-    const halfThickness = 26;
+    const halfThickness = 32;
     const baseDepth = Math.min(this.telegraphDepth, this.depth - 2);
     const outlineDepth = baseDepth + 6;
     const fill = this.scene.add.graphics({ x: this.x, y: this.y }).setDepth(baseDepth);
@@ -330,10 +495,14 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       fillAlpha: 0.4,
       strokeAlpha: 0.75,
       strokeWidth: 5,
-      length: Math.max(140, maxDistance * 0.45),
+      length: Math.max(300, maxDistance * 0.55),
     };
     let pulse: Phaser.Tweens.Tween | undefined;
     let updateHandler: (() => void) | undefined;
+    let lockedAngle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+    let lockedLength = state.length;
+    let origin = new Phaser.Math.Vector2(this.x, this.y);
+    let tracking = true;
 
     const draw = () => {
       fill.clear();
@@ -345,14 +514,20 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     };
 
     const updatePositions = () => {
-      const angle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
-      const travel = Math.min(maxDistance, Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) + 120);
-      state.length = travel;
+      if (tracking) {
+        lockedAngle = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+        const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+        lockedLength = Phaser.Math.Clamp(dist + 160, 300, 420);
+        state.length = lockedLength;
+        origin = new Phaser.Math.Vector2(this.x, this.y);
+      } else {
+        state.length = lockedLength;
+      }
       draw();
-      fill.setPosition(this.x, this.y);
-      outline.setPosition(this.x, this.y);
-      fill.setRotation(angle);
-      outline.setRotation(angle);
+      fill.setPosition(origin.x, origin.y);
+      outline.setPosition(origin.x, origin.y);
+      fill.setRotation(lockedAngle);
+      outline.setRotation(lockedAngle);
     };
 
     draw();
@@ -378,8 +553,34 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       outline.destroy();
     };
 
+    const containsPoint = (px: number, py: number) => {
+      const dx = px - origin.x;
+      const dy = py - origin.y;
+      const cos = Math.cos(lockedAngle);
+      const sin = Math.sin(lockedAngle);
+      const localX = dx * cos + dy * sin;
+      const localY = -dx * sin + dy * cos;
+      return localX >= 0 && localX <= lockedLength && Math.abs(localY) <= halfThickness;
+    };
+
+    const telegraph = this.registerTelegraph(
+      'rush',
+      'rush',
+      timings,
+      containsPoint,
+      {
+        type: 'rush',
+        damage: 1,
+        screenShake: { duration: 90, intensity: 0.008 },
+      },
+      cleanup,
+    );
+
     return {
+      telegraph,
+      destroy: () => telegraph.destroy(),
       startPreWarn: () => {
+        telegraph.setPhase('preWarn');
         stopPulse();
         state.color = TELEGRAPH_COLORS.preWarn;
         state.fillAlpha = 0.4;
@@ -388,33 +589,34 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         draw();
       },
       startWindUp: () => {
+        telegraph.setPhase('windUp');
+        tracking = false;
+        origin = new Phaser.Math.Vector2(this.x, this.y);
+        lockedLength = state.length;
         state.color = TELEGRAPH_COLORS.windUp;
         state.fillAlpha = 0.65;
         state.strokeAlpha = 0.95;
-        state.strokeWidth = 7;
+        state.strokeWidth = 7.5;
         draw();
         stopPulse();
         pulse = this.scene.tweens.addCounter({
           from: 0,
           to: 1,
-          duration: 200,
-          ease: 'Sine.easeInOut',
+          duration: 220,
           yoyo: true,
           repeat: -1,
+          ease: 'Sine.easeInOut',
           onUpdate: (tween) => {
             const t = tween.getValue();
-            state.fillAlpha = Phaser.Math.Linear(0.7, 0.6, t);
             state.strokeWidth = Phaser.Math.Linear(7.5, 6.4, t);
+            state.fillAlpha = Phaser.Math.Linear(0.65, 0.58, t);
             draw();
           },
         });
       },
       startCommit: () => {
+        telegraph.setPhase('commit');
         stopPulse();
-        if (updateHandler) {
-          this.scene.events.off('update', updateHandler);
-          updateHandler = undefined;
-        }
         state.color = TELEGRAPH_COLORS.commit;
         state.fillAlpha = 0.95;
         state.strokeAlpha = 1;
@@ -427,8 +629,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Quad.easeOut',
           onUpdate: draw,
         });
+        const v = this.scene.physics.velocityFromRotation(lockedAngle, 340);
+        this.setVelocity(v.x, v.y);
       },
       startRecovery: () => {
+        telegraph.setPhase('recovery');
         stopPulse();
         state.color = TELEGRAPH_COLORS.recovery;
         draw();
@@ -439,7 +644,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           duration: 250,
           ease: 'Sine.easeIn',
           onUpdate: draw,
-          onComplete: cleanup,
+          onComplete: () => telegraph.destroy(),
         });
       },
     };
@@ -460,7 +665,6 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       .setStrokeStyle(3, TELEGRAPH_COLORS.preWarn, 0.8)
       .setScale(0.96);
     let pulse: Phaser.Tweens.Tween | undefined;
-    let tracking = true;
 
     const updatePositions = () => {
       ring.setPosition(this.x, this.y);
@@ -480,10 +684,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
     const cleanup = () => {
       stopPulse();
-      if (tracking) {
-        this.scene.events.off('update', updateHandler);
-        tracking = false;
-      }
+      this.scene.events.off('update', updateHandler);
       ring.destroy();
       outerEdge.destroy();
       innerEdge.destroy();
@@ -491,8 +692,30 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
     updatePositions();
 
+    const containsPoint = (px: number, py: number) => {
+      const dist = Phaser.Math.Distance.Between(this.x, this.y, px, py);
+      return dist <= range;
+    };
+
+    const telegraph = this.registerTelegraph(
+      'roar',
+      'roar',
+      timings,
+      containsPoint,
+      {
+        type: 'roar',
+        damage: 0,
+        slowMultiplier: 0.8,
+        slowDuration: 1500,
+      },
+      cleanup,
+    );
+
     return {
+      telegraph,
+      destroy: () => telegraph.destroy(),
       startPreWarn: () => {
+        telegraph.setPhase('preWarn');
         stopPulse();
         ring.setStrokeStyle(14, TELEGRAPH_COLORS.preWarn, 0.45);
         outerEdge.setStrokeStyle(6, TELEGRAPH_COLORS.preWarn, 0.9);
@@ -505,6 +728,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         innerEdge.setScale(0.94);
       },
       startWindUp: () => {
+        telegraph.setPhase('windUp');
         ring.setStrokeStyle(14, TELEGRAPH_COLORS.windUp, 0.55);
         outerEdge.setStrokeStyle(6, TELEGRAPH_COLORS.windUp, 0.95);
         innerEdge.setStrokeStyle(3, TELEGRAPH_COLORS.windUp, 0.85);
@@ -519,11 +743,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         });
       },
       startCommit: () => {
+        telegraph.setPhase('commit');
         stopPulse();
-        if (tracking) {
-          this.scene.events.off('update', updateHandler);
-          tracking = false;
-        }
         ring.setStrokeStyle(14, TELEGRAPH_COLORS.commit, 0.95);
         outerEdge.setStrokeStyle(6, TELEGRAPH_COLORS.commit, 1);
         innerEdge.setStrokeStyle(3, TELEGRAPH_COLORS.commit, 0.95);
@@ -538,6 +759,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         });
       },
       startRecovery: () => {
+        telegraph.setPhase('recovery');
         stopPulse();
         ring.setStrokeStyle(14, TELEGRAPH_COLORS.recovery, 0.6);
         outerEdge.setStrokeStyle(6, TELEGRAPH_COLORS.recovery, 0.8);
@@ -550,7 +772,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           alpha: { from: 0.72, to: 0 },
           duration: 250,
           ease: 'Sine.easeIn',
-          onComplete: cleanup,
+          onComplete: () => telegraph.destroy(),
         });
       },
     };
@@ -659,6 +881,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   preDestroy(): void {
+    this.activeTelegraphs.forEach((telegraph) => telegraph.destroy());
+    this.activeTelegraphs.clear();
     this.hpBarBg.destroy();
     this.hpBarFill.destroy();
     super.preDestroy();
@@ -707,7 +931,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
-    const timings: TelegraphTimings = { preWarn: 280, windUp: 360, commit: 220, recovery: 420 };
+    const timings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 200, recovery: 400 };
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
       telegraph: [
@@ -719,7 +943,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Sine.easeOut',
           onStart: () => {
             this.setTint(TELEGRAPH_COLORS.preWarn);
-            telegraph = this.showSweepTelegraph(player, 120, timings);
+            telegraph = this.showSweepTelegraph(player, 80, timings);
             telegraph.startPreWarn();
             this.spawnImpactEmoji(this.x, this.y - 36, '🌀', 0xffe6b3, timings.preWarn + timings.windUp);
           },
@@ -746,10 +970,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Back.easeOut',
           onStart: () => {
             telegraph?.startCommit();
-            if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) < 80) {
-              player.emit('hit', { dmg: 1, type: 'sweep' });
-              this.spawnImpactEmoji(player.x, player.y - 20, '💫', 0xffd18a);
-            }
+            this.spawnImpactEmoji(this.x + Math.cos(Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y)) * 70, this.y - 20, '💫', 0xffd18a, timings.commit);
           },
           onComplete: () => telegraph?.startRecovery(),
         },
@@ -768,7 +989,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   smash(player: Phaser.Physics.Arcade.Sprite) {
-    const timings: TelegraphTimings = { preWarn: 260, windUp: 360, commit: 220, recovery: 520 };
+    const timings: TelegraphTimings = { preWarn: 300, windUp: 450, commit: 180, recovery: 450 };
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
       telegraph: [
@@ -779,7 +1000,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Quad.easeOut',
           onStart: () => {
             this.setTint(TELEGRAPH_COLORS.preWarn);
-            telegraph = this.showSmashTelegraph(player, 130, timings);
+            telegraph = this.showSmashTelegraph(player, 100, timings);
             telegraph.startPreWarn();
             this.spawnImpactEmoji(this.x, this.y - 44, '💢', 0xfff2c6, timings.preWarn + timings.windUp);
           },
@@ -804,10 +1025,6 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Bounce.easeOut',
           onStart: () => {
             telegraph?.startCommit();
-            if (Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y) < 120) {
-              player.emit('hit', { dmg: 1, type: 'smash' });
-              this.spawnImpactEmoji(player.x, player.y - 26, '💥', 0xfff2c6);
-            }
           },
           onComplete: () => telegraph?.startRecovery(),
         },
@@ -826,7 +1043,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   rush(player: Phaser.Physics.Arcade.Sprite) {
-    const timings: TelegraphTimings = { preWarn: 260, windUp: 360, commit: 260, recovery: 460 };
+    const timings: TelegraphTimings = { preWarn: 300, windUp: 400, commit: 300, recovery: 500 };
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
       telegraph: [
@@ -837,7 +1054,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Quad.easeOut',
           onStart: () => {
             this.setTint(TELEGRAPH_COLORS.preWarn);
-            telegraph = this.showRushTelegraph(player, 280, timings);
+            telegraph = this.showRushTelegraph(player, 420, timings);
             telegraph.startPreWarn();
             this.spawnImpactEmoji(this.x, this.y - 34, '👣', 0xffe6bb, timings.preWarn + timings.windUp);
           },
@@ -861,14 +1078,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Expo.easeOut',
           onStart: () => {
             telegraph?.startCommit();
-            const v = this.scene.physics.velocityFromRotation(
-              Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y), 340);
-            this.setVelocity(v.x, v.y);
+            this.spawnImpactEmoji(this.x, this.y - 28, '💢', 0xffe0b3, timings.commit);
           },
           onComplete: () => {
             telegraph?.startRecovery();
-            this.scene.time.delayedCall(80, () => this.setVelocity(0, 0));
-            this.spawnImpactEmoji(this.x, this.y - 28, '💢', 0xffe0b3);
+            this.scene.time.delayedCall(100, () => this.setVelocity(0, 0));
           },
         },
         {
@@ -885,7 +1099,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   roar(player: Phaser.Physics.Arcade.Sprite) {
-    const timings: TelegraphTimings = { preWarn: 300, windUp: 360, commit: 200, recovery: 360 };
+    const timings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 150, recovery: 350 };
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
       telegraph: [
@@ -896,7 +1110,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Sine.easeInOut',
           onStart: () => {
             this.setTintFill(TELEGRAPH_COLORS.preWarn);
-            telegraph = this.showRoarTelegraph(190, timings);
+            telegraph = this.showRoarTelegraph(250, timings);
             telegraph.startPreWarn();
             this.spawnImpactEmoji(this.x, this.y - 48, '😤', 0xfff2c6, timings.preWarn + timings.windUp);
           },
@@ -920,8 +1134,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Sine.easeOut',
           onStart: () => {
             telegraph?.startCommit();
-            player.emit('hit', { dmg: 0, type: 'roar' });
-            this.spawnImpactEmoji(player.x, player.y - 34, '😱', 0xfff2c6);
+            this.spawnImpactEmoji(player.x, player.y - 34, '😱', 0xfff2c6, timings.commit);
           },
           onComplete: () => telegraph?.startRecovery(),
         },
