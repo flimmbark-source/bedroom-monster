@@ -3,7 +3,7 @@ import { ROOM_W, ROOM_H, PLAYER_BASE } from '@game/config';
 import type { Inventory, Item } from '@game/types';
 import { cloneItem, ITEM_TEXTURE_PATHS } from '@game/items';
 import { craft } from '@game/recipes';
-import { Monster } from '@game/monster';
+import { Monster, type TelegraphHitCandidate, type TelegraphImpact } from '@game/monster';
 import { createHUD, drawHUD, type HudElements } from '@ui/hud';
 
 interface GroundItem extends Phaser.GameObjects.Image {
@@ -75,6 +75,12 @@ export class PlayScene extends Phaser.Scene {
   private searchBar?: Phaser.GameObjects.Graphics;
   private searchCheckpoints: SearchCheckpoint[] = [];
   private playerFacing: 'up' | 'down' | 'left' | 'right' = 'down';
+  private playerIFrameUntil = 0;
+  private playerSlowUntil = 0;
+  private playerSlowFactor = 1;
+  private playerSpeedBoostUntil = 0;
+  private playerSpeedBoostMultiplier = 1;
+  private playerKnockbackUntil = 0;
   constructor() { super('Play'); }
 
   preload() {
@@ -228,9 +234,12 @@ export class PlayScene extends Phaser.Scene {
     this.monster.setDepth(10);
     this.physics.add.collider(this.monster, furniture);
     this.physics.add.overlap(this.monster, this.player, () => {
+      if (this.time.now < this.playerIFrameUntil) return;
       // contact damage once per second (simple throttle)
       if (!(this.player as any)._lastHit || this.time.now - (this.player as any)._lastHit > 1000) {
-        (this.player as any)._lastHit = this.time.now; this.damagePlayer(1);
+        (this.player as any)._lastHit = this.time.now;
+        this.damagePlayer(1);
+        this.playerIFrameUntil = this.time.now + 150;
       }
     });
 
@@ -771,12 +780,71 @@ export class PlayScene extends Phaser.Scene {
     }
   }
 
-  damagePlayer(n: number) {
-    this.hp -= n; this.cameras.main.shake(80, 0.004);
+  damagePlayer(n: number, options: { shake?: { duration: number; intensity: number } } = {}) {
+    if (n <= 0) return;
+    const shake = options.shake ?? { duration: 80, intensity: 0.004 };
+    if (shake) {
+      this.cameras.main.shake(shake.duration, shake.intensity);
+    }
+    this.hp -= n;
     if (this.hp <= 0) {
       this.resetPlayerState();
       this.scene.restart();
     }
+  }
+
+  private resolveTelegraphCollisions() {
+    if (!this.player || !this.monster) return;
+    const candidates = this.monster.getTelegraphHitCandidates(this.player);
+    if (!candidates.length) return;
+
+    const priority: Record<TelegraphHitCandidate['priority'], number> = {
+      rush: 3,
+      smash: 2,
+      sweep: 1,
+      roar: 0,
+    };
+
+    candidates.sort((a, b) => priority[b.priority] - priority[a.priority]);
+
+    const now = this.time.now;
+    if (now >= this.playerIFrameUntil) {
+      this.applyMonsterImpact(candidates[0].impact);
+      this.playerIFrameUntil = now + 150;
+    }
+
+    this.monster.resolveTelegraphHits(candidates.map((candidate) => candidate.id));
+  }
+
+  private applyMonsterImpact(impact: TelegraphImpact) {
+    if (impact.damage > 0) {
+      this.damagePlayer(impact.damage, { shake: impact.screenShake });
+    } else if (impact.screenShake) {
+      this.cameras.main.shake(impact.screenShake.duration, impact.screenShake.intensity);
+    }
+
+    if (impact.knockback) {
+      this.applyKnockback(impact.knockback);
+    }
+
+    if (impact.slowDuration && impact.slowMultiplier) {
+      this.applyPlayerSlow(impact.slowDuration, impact.slowMultiplier);
+    }
+  }
+
+  private applyPlayerSlow(duration: number, multiplier: number) {
+    const now = this.time.now;
+    const until = now + duration;
+    this.playerSlowUntil = Math.max(this.playerSlowUntil, until);
+    this.playerSlowFactor = Math.min(this.playerSlowFactor, multiplier);
+  }
+
+  private applyKnockback(strength: number) {
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    const angle = Phaser.Math.Angle.Between(this.monster.x, this.monster.y, this.player.x, this.player.y);
+    const velocity = this.physics.velocityFromRotation(angle, strength);
+    body.setVelocity(velocity.x, velocity.y);
+    this.playerKnockbackUntil = this.time.now + 160;
   }
 
   hitMonster(n: number, emoji: string = '💥') {
@@ -791,8 +859,12 @@ export class PlayScene extends Phaser.Scene {
   }
 
   speedBoost(ms: number) {
-    (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 360;
-    this.time.delayedCall(ms, () => (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 260);
+    const now = this.time.now;
+    const boostMultiplier = 360 / 260;
+    this.playerSpeedBoostUntil = Math.max(this.playerSpeedBoostUntil, now + ms);
+    this.playerSpeedBoostMultiplier = Math.max(this.playerSpeedBoostMultiplier, boostMultiplier);
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    body.maxSpeed = 260 * this.playerSpeedBoostMultiplier;
     this.spawnFloatingEmoji(this.player.x, this.player.y - 40, '⚡', 24, 0xe8ff9e, ms);
   }
 
@@ -801,6 +873,15 @@ export class PlayScene extends Phaser.Scene {
   private resetPlayerState() {
     this.hp = PLAYER_BASE.hp;
     this.playerFacing = 'down';
+    this.playerIFrameUntil = 0;
+    this.playerSlowUntil = 0;
+    this.playerSlowFactor = 1;
+    this.playerSpeedBoostUntil = 0;
+    this.playerSpeedBoostMultiplier = 1;
+    this.playerKnockbackUntil = 0;
+    if (this.player?.body) {
+      (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 260;
+    }
   }
 
   private showMeleeTelegraph(range: number, color: number, emoji: string, duration = 300) {
@@ -1254,7 +1335,25 @@ export class PlayScene extends Phaser.Scene {
 
     // movement
     const body = this.player.body as Phaser.Physics.Arcade.Body;
-    const speed = 260; body.setVelocity(0,0);
+    const now = this.time.now;
+    if (now >= this.playerSpeedBoostUntil && this.playerSpeedBoostMultiplier !== 1) {
+      this.playerSpeedBoostMultiplier = 1;
+      body.maxSpeed = 260;
+    }
+    if (now >= this.playerSlowUntil && this.playerSlowFactor !== 1) {
+      this.playerSlowFactor = 1;
+    }
+    let speedMultiplier = this.playerSpeedBoostMultiplier;
+    if (now < this.playerSlowUntil) {
+      speedMultiplier *= this.playerSlowFactor;
+    }
+    const speed = 260 * speedMultiplier;
+    const knockbackActive = now < this.playerKnockbackUntil;
+    if (knockbackActive) {
+      body.velocity.scale(0.9);
+    } else {
+      body.setVelocity(0,0);
+    }
     const attemptingMovement = !!(
       this.cursors.left?.isDown ||
       this.cursors.right?.isDown ||
@@ -1265,7 +1364,7 @@ export class PlayScene extends Phaser.Scene {
     if (this.searching && attemptingMovement) {
       this.endSearch();
     }
-    if (!this.searching) {
+    if (!this.searching && !knockbackActive) {
       if (this.cursors.left?.isDown) body.setVelocityX(-speed);
       if (this.cursors.right?.isDown) body.setVelocityX(speed);
       if (this.cursors.up?.isDown) body.setVelocityY(-speed);
@@ -1310,6 +1409,7 @@ export class PlayScene extends Phaser.Scene {
 
     // monster update
     this.monster.update(delta/1000, this.player);
+    this.resolveTelegraphCollisions();
 
     // HUD
     drawHUD(this.hud, this.hp, PLAYER_BASE.hp, this.inv);
