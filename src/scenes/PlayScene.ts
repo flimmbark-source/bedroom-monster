@@ -70,11 +70,8 @@ export class PlayScene extends Phaser.Scene {
       frameHeight: 128,
     });
 
-    Object.entries(ITEM_TEXTURE_PATHS).forEach(([key, path]) => {
-      if (!this.textures.exists(key)) {
-        this.load.image(key, path);
-      }
-    });
+    this.load.atlas('furniture', 'assets/sprites/furniture.png', 'assets/sprites/furniture.json');
+
   }
 
   create() {
@@ -94,6 +91,7 @@ export class PlayScene extends Phaser.Scene {
     this.add.rectangle(ROOM_W/2, ROOM_H/2, ROOM_W, ROOM_H, 0x161a22).setStrokeStyle(2, 0x2a3242);
 
     // furniture (blocking)
+
     const blocks = this.physics.add.staticGroup();
     this.addFurnitureBlock(blocks, 320, 180, 360, 40, {
       searchable: true,
@@ -125,6 +123,7 @@ export class PlayScene extends Phaser.Scene {
     });
     this.addFurnitureBlock(blocks, 700, 640, 420, 40); // rug edge (as blocker for proto)
 
+
     // player
     this.player = this.physics.add.sprite(200, 200, 'player', 16);
     this.player.setScale(0.5);
@@ -135,12 +134,12 @@ export class PlayScene extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
     this.player.anims.play('player-idle');
-    this.physics.add.collider(this.player, blocks);
+    this.physics.add.collider(this.player, furniture);
 
     // monster
     this.monster = new Monster(this, 900, 700);
     this.monster.setDepth(10);
-    this.physics.add.collider(this.monster, blocks);
+    this.physics.add.collider(this.monster, furniture);
     this.physics.add.overlap(this.monster, this.player, () => {
       // contact damage once per second (simple throttle)
       if (!(this.player as any)._lastHit || this.time.now - (this.player as any)._lastHit > 1000) {
