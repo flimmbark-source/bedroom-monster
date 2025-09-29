@@ -59,12 +59,12 @@ export class PlayScene extends Phaser.Scene {
   private fxDepth = 200;
   private aimAngle = -Math.PI / 2;
   private restockPoints = [
-    { x: 220, y: 480 },
-    { x: 1080, y: 480 },
-    { x: 640, y: 200 },
-    { x: 780, y: 320 },
-    { x: 420, y: 640 },
-    { x: 860, y: 596 },
+    { x: 420, y: 360 },
+    { x: 860, y: 360 },
+    { x: 640, y: 440 },
+    { x: 260, y: 520 },
+    { x: 1020, y: 520 },
+    { x: 960, y: 620 },
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   private furniture: SearchableFurniture[] = [];
@@ -114,7 +114,7 @@ export class PlayScene extends Phaser.Scene {
     // furniture (blocking)
 
     const furniture = this.physics.add.staticGroup();
-    this.addFurnitureBlock(furniture, 320, 260, 240, 190, {
+    this.addFurnitureBlock(furniture, 640, 230, 240, 190, {
       searchable: true,
       name: 'Bed',
       searchDuration: 2600,
@@ -128,7 +128,7 @@ export class PlayScene extends Phaser.Scene {
         scale: 0.9,
       },
     });
-    this.addFurnitureBlock(furniture, 220, 420, 120, 70, {
+    this.addFurnitureBlock(furniture, 480, 360, 120, 70, {
       searchable: true,
       name: 'Nightstand',
       searchDuration: 2000,
@@ -142,7 +142,7 @@ export class PlayScene extends Phaser.Scene {
         scale: 0.65,
       },
     });
-    this.addFurnitureBlock(furniture, 460, 420, 120, 70, {
+    this.addFurnitureBlock(furniture, 800, 360, 120, 70, {
       searchable: true,
       name: 'Nightstand',
       searchDuration: 2000,
@@ -157,7 +157,7 @@ export class PlayScene extends Phaser.Scene {
         flipX: true,
       },
     });
-    this.addFurnitureBlock(furniture, 980, 240, 200, 90, {
+    this.addFurnitureBlock(furniture, 1060, 280, 200, 90, {
       searchable: true,
       name: 'Desk',
       searchDuration: 2200,
@@ -171,7 +171,7 @@ export class PlayScene extends Phaser.Scene {
         scale: 0.9,
       },
     });
-    this.addFurnitureBlock(furniture, 1020, 520, 160, 90, {
+    this.addFurnitureBlock(furniture, 280, 560, 160, 90, {
       searchable: true,
       name: 'Dresser',
       searchDuration: 2400,
@@ -185,7 +185,7 @@ export class PlayScene extends Phaser.Scene {
         scale: 0.85,
       },
     });
-    this.addFurnitureBlock(furniture, 320, 580, 220, 90, {
+    this.addFurnitureBlock(furniture, 960, 580, 220, 90, {
       searchable: true,
       name: 'Vanity',
       searchDuration: 2100,
@@ -200,13 +200,13 @@ export class PlayScene extends Phaser.Scene {
         flipX: true,
       },
     });
-    this.addFurnitureBlock(furniture, 640, 420, 380, 60, {
+    this.addFurnitureBlock(furniture, 640, 360, 380, 60, {
       sprite: {
         frame: 'rug',
-        offsetY: -10,
+        offsetY: -20,
         depth: 1,
-        scaleX: 1.6,
-        scaleY: 0.9,
+        scaleX: 1.45,
+        scaleY: 1,
       },
     }); // rug edge (as blocker for proto)
 
@@ -257,12 +257,12 @@ export class PlayScene extends Phaser.Scene {
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
     // starter items
-    this.createGroundItem(220, 480, 'knife');
-    this.createGroundItem(1080, 480, 'bottle');
-    this.createGroundItem(640, 200, 'soda');
-    this.createGroundItem(780, 320, 'match');
-    this.createGroundItem(420, 640, 'bandaid');
-    this.createGroundItem(860, 596, 'yoyo');
+    this.createGroundItem(420, 360, 'knife');
+    this.createGroundItem(860, 360, 'bottle');
+    this.createGroundItem(640, 440, 'soda');
+    this.createGroundItem(260, 520, 'match');
+    this.createGroundItem(1020, 520, 'bandaid');
+    this.createGroundItem(960, 620, 'yoyo');
 
     this.time.addEvent({
       delay: 15000,
