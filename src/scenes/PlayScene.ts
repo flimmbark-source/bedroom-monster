@@ -1077,6 +1077,16 @@ export class PlayScene extends Phaser.Scene {
     // movement
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     const speed = 260; body.setVelocity(0,0);
+    const attemptingMovement = !!(
+      this.cursors.left?.isDown ||
+      this.cursors.right?.isDown ||
+      this.cursors.up?.isDown ||
+      this.cursors.down?.isDown
+    );
+
+    if (this.searching && attemptingMovement) {
+      this.endSearch();
+    }
     if (!this.searching) {
       if (this.cursors.left?.isDown) body.setVelocityX(-speed);
       if (this.cursors.right?.isDown) body.setVelocityX(speed);
