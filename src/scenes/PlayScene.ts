@@ -51,7 +51,7 @@ export class PlayScene extends Phaser.Scene {
     { x: 640, y: 200 },
     { x: 780, y: 320 },
     { x: 420, y: 640 },
-    { x: 860, y: 640 },
+    { x: 860, y: 596 },
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   private furniture: SearchableFurniture[] = [];
@@ -187,7 +187,7 @@ export class PlayScene extends Phaser.Scene {
     this.createGroundItem(640, 200, 'soda');
     this.createGroundItem(780, 320, 'match');
     this.createGroundItem(420, 640, 'bandaid');
-    this.createGroundItem(860, 640, 'yoyo');
+    this.createGroundItem(860, 596, 'yoyo');
 
     this.time.addEvent({
       delay: 15000,
