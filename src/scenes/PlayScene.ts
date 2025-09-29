@@ -11,6 +11,26 @@ interface GroundItem extends Phaser.GameObjects.Image {
   label: Phaser.GameObjects.Text;
 }
 
+type SearchCheckpoint = { value: number; triggered: boolean };
+
+type FurnitureOptions = {
+  searchable?: boolean;
+  name?: string;
+  searchDuration?: number;
+  checkPoints?: number[];
+  lootTable?: Item['id'][];
+  findChance?: number;
+};
+
+type SearchableFurniture = {
+  name: string;
+  rect: Phaser.GameObjects.Rectangle;
+  searchDuration: number;
+  checkPoints: number[];
+  lootTable: Item['id'][];
+  findChance: number;
+};
+
 export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   monster!: Monster;
@@ -31,6 +51,13 @@ export class PlayScene extends Phaser.Scene {
     { x: 860, y: 640 },
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
+  private furniture: SearchableFurniture[] = [];
+  private searching = false;
+  private activeFurniture: SearchableFurniture | null = null;
+  private searchElapsed = 0;
+  private searchDuration = 0;
+  private searchBar?: Phaser.GameObjects.Graphics;
+  private searchCheckpoints: SearchCheckpoint[] = [];
   constructor() { super('Play'); }
 
   preload() {
@@ -54,6 +81,13 @@ export class PlayScene extends Phaser.Scene {
     this.resetPlayerState();
     this.createAnimations();
 
+    this.furniture = [];
+    this.searching = false;
+    this.activeFurniture = null;
+    this.searchElapsed = 0;
+    this.searchDuration = 0;
+    this.searchCheckpoints = [];
+
     this.physics.world.setBounds(0, 0, ROOM_W, ROOM_H);
 
     // room bg
@@ -61,16 +95,35 @@ export class PlayScene extends Phaser.Scene {
 
     // furniture (blocking)
     const blocks = this.physics.add.staticGroup();
-    const addBlock = (x:number,y:number,w:number,h:number)=>{
-      const r = this.add.rectangle(x,y,w,h,0x222831).setStrokeStyle(1,0x3a4152);
-      this.physics.add.existing(r, true);
-      blocks.add(r as any);
-    };
-    addBlock(320, 180, 360, 40); // bed headboard
-    addBlock(320, 240, 360, 40); // bed foot
-    addBlock(260, 540, 220, 60); // desk
-    addBlock(1040, 520, 160, 60); // dresser
-    addBlock(700, 640, 420, 40); // rug edge (as blocker for proto)
+    this.addFurnitureBlock(blocks, 320, 180, 360, 40, {
+      searchable: true,
+      name: 'Bed',
+      searchDuration: 2600,
+      checkPoints: [0.85, 0.55, 0.25],
+      findChance: 0.5,
+    });
+    this.addFurnitureBlock(blocks, 320, 240, 360, 40, {
+      searchable: true,
+      name: 'Bed',
+      searchDuration: 2600,
+      checkPoints: [0.85, 0.55, 0.25],
+      findChance: 0.5,
+    });
+    this.addFurnitureBlock(blocks, 260, 540, 220, 60, {
+      searchable: true,
+      name: 'Desk',
+      searchDuration: 2200,
+      checkPoints: [0.75, 0.4],
+      findChance: 0.6,
+    });
+    this.addFurnitureBlock(blocks, 1040, 520, 160, 60, {
+      searchable: true,
+      name: 'Dresser',
+      searchDuration: 2400,
+      checkPoints: [0.7, 0.35],
+      findChance: 0.55,
+    });
+    this.addFurnitureBlock(blocks, 700, 640, 420, 40); // rug edge (as blocker for proto)
 
     // player
     this.player = this.physics.add.sprite(200, 200, 'player', 16);
@@ -140,10 +193,45 @@ export class PlayScene extends Phaser.Scene {
 
     // HUD
     this.hud = createHUD(this, 5);
+
+    if (this.searchBar) {
+      this.searchBar.destroy();
+    }
+    this.searchBar = this.add.graphics();
+    this.searchBar.setDepth(this.fxDepth + 10);
+    this.searchBar.setVisible(false);
   }
 
-  tryPickup() {
-    const obj: GroundItem | null = (this as any)._overItem || null; if (!obj) return;
+  private addFurnitureBlock(
+    blocks: Phaser.Physics.Arcade.StaticGroup,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    options: FurnitureOptions = {}
+  ) {
+    const rect = this.add.rectangle(x, y, w, h, 0x222831).setStrokeStyle(1, 0x3a4152);
+    this.physics.add.existing(rect, true);
+    blocks.add(rect as any);
+
+    if (!options.searchable) return;
+
+    const checkpoints = [...(options.checkPoints ?? [0.8, 0.5, 0.2])]
+      .filter((v) => v > 0 && v < 1)
+      .sort((a, b) => b - a);
+
+    this.furniture.push({
+      name: options.name ?? 'Furniture',
+      rect,
+      searchDuration: options.searchDuration ?? 2400,
+      checkPoints: checkpoints,
+      lootTable: options.lootTable ?? this.restockPool,
+      findChance: options.findChance ?? 0.5,
+    });
+  }
+
+  tryPickup(): boolean {
+    const obj: GroundItem | null = (this as any)._overItem || null; if (!obj) return false;
     const id = obj.itemId as Item['id'];
     // find slot
     const idx = this.inv[0]? (this.inv[1]? -1 : 1) : 0;
@@ -160,12 +248,166 @@ export class PlayScene extends Phaser.Scene {
       obj.destroy();
       (this as any)._overItem = null;
     }
+    return true;
+  }
+
+  private hasEmptyInventorySlot() {
+    return this.inv.some((slot) => slot === null);
+  }
+
+  private giveItemToInventory(id: Item['id']) {
+    const idx = this.inv.findIndex((slot) => slot === null);
+    if (idx === -1) return false;
+    this.inv[idx] = cloneItem(id);
+    return true;
   }
 
   drop(slot: 0|1) {
     const it = this.inv[slot]; if (!it) return;
     this.inv[slot] = null;
     this.createGroundItem(this.player.x + 14, this.player.y + 14, it.id);
+  }
+
+  private tryStartSearch() {
+    if (this.searching) return;
+    const furniture = this.getNearbyFurniture();
+    if (!furniture) return;
+    if (!this.hasEmptyInventorySlot()) {
+      this.spawnFloatingEmoji(this.player.x, this.player.y - 44, '📦', 20, 0xff8383, 420);
+      return;
+    }
+    this.beginSearch(furniture);
+  }
+
+  private getNearbyFurniture() {
+    const maxDistance = 64;
+    let closest: SearchableFurniture | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const furniture of this.furniture) {
+      if (!furniture.rect.active) continue;
+      const dist = this.distanceToRectangle(this.player.x, this.player.y, furniture.rect);
+      if (dist <= maxDistance && dist < bestDistance) {
+        bestDistance = dist;
+        closest = furniture;
+      }
+    }
+    return closest;
+  }
+
+  private distanceToRectangle(px: number, py: number, rect: Phaser.GameObjects.Rectangle) {
+    const bounds = rect.getBounds();
+    const halfW = bounds.width / 2;
+    const halfH = bounds.height / 2;
+    const dx = Math.max(Math.abs(px - bounds.centerX) - halfW, 0);
+    const dy = Math.max(Math.abs(py - bounds.centerY) - halfH, 0);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  private beginSearch(furniture: SearchableFurniture) {
+    this.searching = true;
+    this.activeFurniture = furniture;
+    this.searchElapsed = 0;
+    this.searchDuration = furniture.searchDuration;
+    this.searchCheckpoints = (furniture.checkPoints.length > 0
+      ? furniture.checkPoints
+      : [0.5])
+      .slice()
+      .sort((a, b) => b - a)
+      .map((value) => ({ value, triggered: false }));
+    this.drawSearchBar(1);
+    this.searchBar?.setVisible(true);
+    this.spawnFloatingEmoji(this.player.x, this.player.y - 48, '🔍', 22, 0xfff3a5, 520);
+  }
+
+  private updateSearch(delta: number) {
+    if (!this.searching || !this.activeFurniture) return;
+    if (!this.hasEmptyInventorySlot()) {
+      this.endSearch();
+      return;
+    }
+
+    this.searchElapsed += delta;
+    const remaining = Math.max(this.searchDuration - this.searchElapsed, 0);
+    const progress = this.searchDuration > 0 ? remaining / this.searchDuration : 0;
+
+    for (const checkpoint of this.searchCheckpoints) {
+      if (!checkpoint.triggered && progress <= checkpoint.value) {
+        checkpoint.triggered = true;
+        this.tryAwardSearchLoot();
+        if (!this.searching) return;
+      }
+    }
+
+    this.drawSearchBar(progress);
+
+    if (remaining <= 0) {
+      this.endSearch();
+    }
+  }
+
+  private drawSearchBar(progress: number) {
+    if (!this.searchBar) return;
+    const clamped = Phaser.Math.Clamp(progress, 0, 1);
+    const width = 96;
+    const height = 14;
+    const innerWidth = width - 6;
+    const innerHeight = height - 6;
+
+    this.searchBar.clear();
+    this.searchBar.setPosition(this.player.x, this.player.y - 58);
+    this.searchBar.fillStyle(0x101621, 0.75);
+    this.searchBar.fillRoundedRect(-width / 2, -height / 2, width, height, 6);
+
+    if (clamped > 0) {
+      this.searchBar.fillStyle(0x5daeff, 0.95);
+      this.searchBar.fillRect(-innerWidth / 2, -innerHeight / 2, innerWidth * clamped, innerHeight);
+    }
+
+    this.searchBar.lineStyle(1, 0xffffff, 0.85);
+    this.searchBar.strokeRoundedRect(-width / 2, -height / 2, width, height, 6);
+
+    for (const checkpoint of this.searchCheckpoints) {
+      const markerX = Phaser.Math.Clamp(checkpoint.value, 0, 1) * width - width / 2;
+      const color = checkpoint.triggered ? 0x7effa5 : 0xffffff;
+      this.searchBar.lineStyle(1.5, color, 0.9);
+      this.searchBar.beginPath();
+      this.searchBar.moveTo(markerX, -height / 2 - 2);
+      this.searchBar.lineTo(markerX, height / 2 + 2);
+      this.searchBar.strokePath();
+    }
+
+    this.searchBar.setVisible(true);
+  }
+
+  private tryAwardSearchLoot() {
+    if (!this.activeFurniture || !this.hasEmptyInventorySlot()) {
+      this.endSearch();
+      return;
+    }
+
+    if (Phaser.Math.FloatBetween(0, 1) > this.activeFurniture.findChance) return;
+
+    const itemId = Phaser.Utils.Array.GetRandom(this.activeFurniture.lootTable);
+    if (!itemId) return;
+
+    if (this.giveItemToInventory(itemId)) {
+      this.spawnFloatingEmoji(this.player.x, this.player.y - 52, '✨', 24, 0xfff7c5, 560);
+      if (!this.hasEmptyInventorySlot()) {
+        this.endSearch();
+      }
+    }
+  }
+
+  private endSearch() {
+    this.searching = false;
+    this.activeFurniture = null;
+    this.searchElapsed = 0;
+    this.searchDuration = 0;
+    this.searchCheckpoints = [];
+    if (this.searchBar) {
+      this.searchBar.clear();
+      this.searchBar.setVisible(false);
+    }
   }
 
   use(slot: 0|1) {
@@ -836,10 +1078,12 @@ export class PlayScene extends Phaser.Scene {
     // movement
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     const speed = 260; body.setVelocity(0,0);
-    if (this.cursors.left?.isDown) body.setVelocityX(-speed);
-    if (this.cursors.right?.isDown) body.setVelocityX(speed);
-    if (this.cursors.up?.isDown) body.setVelocityY(-speed);
-    if (this.cursors.down?.isDown) body.setVelocityY(speed);
+    if (!this.searching) {
+      if (this.cursors.left?.isDown) body.setVelocityX(-speed);
+      if (this.cursors.right?.isDown) body.setVelocityX(speed);
+      if (this.cursors.up?.isDown) body.setVelocityY(-speed);
+      if (this.cursors.down?.isDown) body.setVelocityY(speed);
+    }
 
     const moving = body.velocity.lengthSq() > 0;
     this.player.anims.play(moving ? 'player-walk' : 'player-idle', true);
@@ -850,9 +1094,16 @@ export class PlayScene extends Phaser.Scene {
     }
 
     // interaction
-    if (Phaser.Input.Keyboard.JustDown(this.keyPick)) this.tryPickup();
-    if (Phaser.Input.Keyboard.JustDown(this.keyDrop)) this.drop(0);
-    if (Phaser.Input.Keyboard.JustDown(this.keyCraft)) this.craft();
+    if (!this.searching) {
+      if (Phaser.Input.Keyboard.JustDown(this.keyPick)) {
+        const pickedUp = this.tryPickup();
+        if (!pickedUp) this.tryStartSearch();
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keyDrop)) this.drop(0);
+      if (Phaser.Input.Keyboard.JustDown(this.keyCraft)) this.craft();
+    }
+
+    this.updateSearch(delta);
 
     // monster update
     this.monster.update(delta/1000, this.player);
