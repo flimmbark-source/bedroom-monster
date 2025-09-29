@@ -72,6 +72,10 @@ export class PlayScene extends Phaser.Scene {
 
     this.load.atlas('furniture', 'assets/sprites/furniture.png', 'assets/sprites/furniture.json');
 
+    Object.entries(ITEM_TEXTURE_PATHS).forEach(([key, path]) => {
+      this.load.image(key, path);
+    });
+
   }
 
   create() {
