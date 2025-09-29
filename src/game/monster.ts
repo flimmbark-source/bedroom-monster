@@ -21,8 +21,8 @@ type TelegraphHandle = {
 };
 
 export class Monster extends Phaser.Physics.Arcade.Sprite {
-  hp = 12;
-  private hpMax = this.hp;
+  private hpMax = 12;
+  hp = this.hpMax;
   state: 'wander'|'chase'|'engage' = 'wander';
   actionT = { sweep: 2.5, smash: 4.0, rush: 5.0, roar: 7.0 };
   cd = { sweep: 0, smash: 0, rush: 0, roar: 0 };
