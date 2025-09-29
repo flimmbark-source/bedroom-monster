@@ -787,7 +787,16 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     this.setScale(0.45);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setCircle(42, 22, 42);
+    const monsterScaleX = Math.abs(this.scaleX) || 1;
+    const monsterScaleY = Math.abs(this.scaleY) || 1;
+    const monsterBodyRadius = 42;
+    const monsterBodyOffsetX = 22;
+    const monsterBodyOffsetY = 42;
+    body.setCircle(
+      monsterBodyRadius / monsterScaleX,
+      monsterBodyOffsetX / monsterScaleX,
+      monsterBodyOffsetY / monsterScaleY,
+    );
     this.setCollideWorldBounds(true);
     this.playMovementAnimation(false);
     this.baseScale = { x: this.scaleX, y: this.scaleY };
