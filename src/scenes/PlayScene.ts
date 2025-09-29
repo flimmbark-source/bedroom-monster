@@ -125,7 +125,7 @@ export class PlayScene extends Phaser.Scene {
 
 
     // player
-    this.player = this.physics.add.sprite(200, 200, 'player', 16);
+    this.player = this.physics.add.sprite(640, 480, 'player', 16);
     this.player.setScale(0.5);
     const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     playerBody.setSize(28, 32);
