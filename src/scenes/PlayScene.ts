@@ -13,6 +13,18 @@ interface GroundItem extends Phaser.GameObjects.Image {
 
 type SearchCheckpoint = { value: number; triggered: boolean };
 
+type FurnitureSpriteOptions = {
+  frame: string;
+  offsetX?: number;
+  offsetY?: number;
+  depth?: number;
+  scale?: number;
+  scaleX?: number;
+  scaleY?: number;
+  flipX?: boolean;
+  flipY?: boolean;
+};
+
 type FurnitureOptions = {
   searchable?: boolean;
   name?: string;
@@ -21,6 +33,7 @@ type FurnitureOptions = {
   lootTable?: Item['id'][];
   findChance?: number;
   emoji?: string;
+  sprite?: FurnitureSpriteOptions;
 };
 
 type SearchableFurniture = {
@@ -46,12 +59,12 @@ export class PlayScene extends Phaser.Scene {
   private fxDepth = 200;
   private aimAngle = -Math.PI / 2;
   private restockPoints = [
-    { x: 220, y: 480 },
-    { x: 1080, y: 480 },
-    { x: 640, y: 200 },
-    { x: 780, y: 320 },
-    { x: 420, y: 640 },
-    { x: 860, y: 596 },
+    { x: 420, y: 360 },
+    { x: 860, y: 360 },
+    { x: 640, y: 440 },
+    { x: 260, y: 520 },
+    { x: 1020, y: 520 },
+    { x: 960, y: 620 },
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   private furniture: SearchableFurniture[] = [];
@@ -101,39 +114,101 @@ export class PlayScene extends Phaser.Scene {
     // furniture (blocking)
 
     const furniture = this.physics.add.staticGroup();
-    this.addFurnitureBlock(furniture, 320, 180, 360, 40, {
+    this.addFurnitureBlock(furniture, 640, 230, 240, 190, {
       searchable: true,
       name: 'Bed',
       searchDuration: 2600,
       checkPoints: [0.85, 0.55, 0.25],
       findChance: 0.5,
       emoji: '🛏️',
+      sprite: {
+        frame: 'bed',
+        offsetY: -20,
+        depth: 2,
+        scale: 0.9,
+      },
     });
-    this.addFurnitureBlock(furniture, 320, 240, 360, 40, {
+    this.addFurnitureBlock(furniture, 480, 360, 120, 70, {
       searchable: true,
-      name: 'Bed',
-      searchDuration: 2600,
-      checkPoints: [0.85, 0.55, 0.25],
-      findChance: 0.5,
-      emoji: '🛏️',
+      name: 'Nightstand',
+      searchDuration: 2000,
+      checkPoints: [0.7, 0.35],
+      findChance: 0.6,
+      emoji: '🛋️',
+      sprite: {
+        frame: 'dresser',
+        offsetY: -40,
+        depth: 2,
+        scale: 0.65,
+      },
     });
-    this.addFurnitureBlock(furniture, 260, 540, 220, 60, {
+    this.addFurnitureBlock(furniture, 800, 360, 120, 70, {
+      searchable: true,
+      name: 'Nightstand',
+      searchDuration: 2000,
+      checkPoints: [0.7, 0.35],
+      findChance: 0.6,
+      emoji: '🛋️',
+      sprite: {
+        frame: 'dresser',
+        offsetY: -40,
+        depth: 2,
+        scale: 0.65,
+        flipX: true,
+      },
+    });
+    this.addFurnitureBlock(furniture, 1060, 280, 200, 90, {
       searchable: true,
       name: 'Desk',
       searchDuration: 2200,
       checkPoints: [0.75, 0.4],
       findChance: 0.6,
       emoji: '🪑',
+      sprite: {
+        frame: 'desk',
+        offsetY: -30,
+        depth: 2,
+        scale: 0.9,
+      },
     });
-    this.addFurnitureBlock(furniture, 1040, 520, 160, 60, {
+    this.addFurnitureBlock(furniture, 280, 560, 160, 90, {
       searchable: true,
       name: 'Dresser',
       searchDuration: 2400,
       checkPoints: [0.7, 0.35],
       findChance: 0.55,
       emoji: '🧺',
+      sprite: {
+        frame: 'dresser',
+        offsetY: -50,
+        depth: 2,
+        scale: 0.85,
+      },
     });
-    this.addFurnitureBlock(furniture, 700, 640, 420, 40); // rug edge (as blocker for proto)
+    this.addFurnitureBlock(furniture, 960, 580, 220, 90, {
+      searchable: true,
+      name: 'Vanity',
+      searchDuration: 2100,
+      checkPoints: [0.8, 0.45],
+      findChance: 0.58,
+      emoji: '💄',
+      sprite: {
+        frame: 'desk',
+        offsetY: -30,
+        depth: 2,
+        scale: 0.8,
+        flipX: true,
+      },
+    });
+    this.addFurnitureBlock(furniture, 640, 360, 380, 60, {
+      sprite: {
+        frame: 'rug',
+        offsetY: -20,
+        depth: 1,
+        scaleX: 1.45,
+        scaleY: 1,
+      },
+    }); // rug edge (as blocker for proto)
 
 
     // player
@@ -182,12 +257,12 @@ export class PlayScene extends Phaser.Scene {
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
     // starter items
-    this.createGroundItem(220, 480, 'knife');
-    this.createGroundItem(1080, 480, 'bottle');
-    this.createGroundItem(640, 200, 'soda');
-    this.createGroundItem(780, 320, 'match');
-    this.createGroundItem(420, 640, 'bandaid');
-    this.createGroundItem(860, 596, 'yoyo');
+    this.createGroundItem(420, 360, 'knife');
+    this.createGroundItem(860, 360, 'bottle');
+    this.createGroundItem(640, 440, 'soda');
+    this.createGroundItem(260, 520, 'match');
+    this.createGroundItem(1020, 520, 'bandaid');
+    this.createGroundItem(960, 620, 'yoyo');
 
     this.time.addEvent({
       delay: 15000,
@@ -222,8 +297,36 @@ export class PlayScene extends Phaser.Scene {
     options: FurnitureOptions = {}
   ) {
     const rect = this.add.rectangle(x, y, w, h, 0x222831).setStrokeStyle(1, 0x3a4152);
+    rect.setVisible(false);
+    rect.setFillStyle(0x222831, 0);
+    rect.setStrokeStyle(0);
     this.physics.add.existing(rect, true);
     blocks.add(rect as any);
+
+    if (options.sprite) {
+      const {
+        frame,
+        offsetX = 0,
+        offsetY = 0,
+        depth = 3,
+        scale,
+        scaleX,
+        scaleY,
+        flipX = false,
+        flipY = false,
+      } = options.sprite;
+      const sprite = this.add.image(x + offsetX, y + offsetY, 'furniture', frame);
+      sprite.setOrigin(0.5, 0.5);
+      sprite.setDepth(depth);
+      sprite.setFlip(flipX, flipY);
+      if (typeof scale === 'number') {
+        sprite.setScale(scale);
+      } else {
+        const sx = scaleX ?? 1;
+        const sy = scaleY ?? scaleX ?? 1;
+        sprite.setScale(sx, sy);
+      }
+    }
 
     if (!options.searchable) return;
 
@@ -265,6 +368,10 @@ export class PlayScene extends Phaser.Scene {
         return '🪑';
       case 'dresser':
         return '🧺';
+      case 'nightstand':
+        return '🛋️';
+      case 'vanity':
+        return '💄';
       default:
         return '🔎';
     }
