@@ -933,6 +933,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   sweep(player: Phaser.Physics.Arcade.Sprite) {
     const timings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 200, recovery: 400 };
     let telegraph: TelegraphHandle | undefined;
+    const sweepRange = 120;
     this.startAction({
       telegraph: [
         {
@@ -943,7 +944,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Sine.easeOut',
           onStart: () => {
             this.setTint(TELEGRAPH_COLORS.preWarn);
-            telegraph = this.showSweepTelegraph(player, 80, timings);
+            telegraph = this.showSweepTelegraph(player, sweepRange, timings);
             telegraph.startPreWarn();
             this.spawnImpactEmoji(this.x, this.y - 36, '🌀', 0xffe6b3, timings.preWarn + timings.windUp);
           },
@@ -970,7 +971,15 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Back.easeOut',
           onStart: () => {
             telegraph?.startCommit();
-            this.spawnImpactEmoji(this.x + Math.cos(Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y)) * 70, this.y - 20, '💫', 0xffd18a, timings.commit);
+            const angleToPlayer = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
+            const impactRadius = sweepRange * 0.85;
+            this.spawnImpactEmoji(
+              this.x + Math.cos(angleToPlayer) * impactRadius,
+              this.y - 20,
+              '💫',
+              0xffd18a,
+              timings.commit,
+            );
           },
           onComplete: () => telegraph?.startRecovery(),
         },
