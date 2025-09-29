@@ -249,22 +249,6 @@ export class PlayScene extends Phaser.Scene {
         offsetX: 1.5,
       },
     });
-    this.addFurnitureBlock(furniture, 640, 360, {
-      sprite: {
-        frame: 'rug',
-        offsetY: -20,
-        depth: 1,
-        scaleX: 1.45,
-        scaleY: 1,
-      },
-      hitbox: {
-        width: 213,
-        height: 60,
-        offsetY: -32,
-      },
-    }); // rug edge (as blocker for proto)
-
-
     // player
     this.player = this.physics.add.sprite(200, 200, 'player', 8);
     this.player.setScale(0.5);
