@@ -1,11 +1,13 @@
 import type Phaser from 'phaser';
 import { ROOM_W } from '@game/config';
+import { ITEM_TEXTURE_KEYS } from '@game/items';
 import type { Inventory, Item } from '@game/types';
 
 export type HudElements = {
   container: Phaser.GameObjects.Container;
   hearts: Phaser.GameObjects.Graphics;
   slotTexts: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];
+  slotIcons: [Phaser.GameObjects.Image, Phaser.GameObjects.Image];
 };
 
 export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
@@ -33,23 +35,28 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
   hearts.setScrollFactor(0);
   container.add(hearts);
 
-  const makeSlotText = (x: number, idx: number) => {
-    const text = scene.add.text(x + 8, 60, `${idx + 1}: —`, {
+  const makeSlotElements = (x: number, idx: number) => {
+    const icon = scene.add.image(x + 30, 74, ITEM_TEXTURE_KEYS.match);
+    icon.setDisplaySize(20, 20);
+    icon.setScrollFactor(0);
+    icon.setVisible(false);
+    container.add(icon);
+
+    const text = scene.add.text(x + 48, 60, `${idx + 1}: —`, {
       fontFamily: 'monospace',
       fontSize: '12px',
-      wordWrap: { width: 108 },
+      wordWrap: { width: 84 },
     });
     text.setOrigin(0, 0);
     text.setLineSpacing(2);
     text.setScrollFactor(0);
     container.add(text);
-    return text;
+    return { icon, text };
   };
 
-  const slotTexts: [Phaser.GameObjects.Text, Phaser.GameObjects.Text] = [
-    makeSlotText(20, 0),
-    makeSlotText(160, 1),
-  ];
+  const slotElements = [makeSlotElements(20, 0), makeSlotElements(160, 1)] as const;
+  const slotIcons: HudElements['slotIcons'] = [slotElements[0].icon, slotElements[1].icon];
+  const slotTexts: HudElements['slotTexts'] = [slotElements[0].text, slotElements[1].text];
 
   const controlsText = scene.add.text(
     ROOM_W - 24,
@@ -77,9 +84,9 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
 
   // initialize once so the HUD starts with correct values
   const initialInv: Inventory = [null, null];
-  drawHUD({ container, hearts, slotTexts }, maxHp, maxHp, initialInv);
+  drawHUD({ container, hearts, slotTexts, slotIcons }, maxHp, maxHp, initialInv);
 
-  return { container, hearts, slotTexts };
+  return { container, hearts, slotTexts, slotIcons };
 }
 
 function slotLabel(i: number, it: Item | null) {
@@ -88,7 +95,7 @@ function slotLabel(i: number, it: Item | null) {
 }
 
 export function drawHUD(hud: HudElements, hp: number, maxHp: number, inv: Inventory) {
-  const { hearts, slotTexts } = hud;
+  const { hearts, slotTexts, slotIcons } = hud;
 
   hearts.clear();
   for (let i = 0; i < maxHp; i += 1) {
@@ -96,6 +103,15 @@ export function drawHUD(hud: HudElements, hp: number, maxHp: number, inv: Invent
     hearts.fillStyle(color, 1).fillCircle(28 + i * 20, 32, 7);
   }
 
-  slotTexts[0].setText(slotLabel(0, inv[0]));
-  slotTexts[1].setText(slotLabel(1, inv[1]));
+  for (let i = 0; i < slotTexts.length; i += 1) {
+    const item = inv[i];
+    slotTexts[i].setText(slotLabel(i, item));
+    if (item) {
+      slotIcons[i].setTexture(item.icon);
+      slotIcons[i].setDisplaySize(20, 20);
+      slotIcons[i].setVisible(true);
+    } else {
+      slotIcons[i].setVisible(false);
+    }
+  }
 }

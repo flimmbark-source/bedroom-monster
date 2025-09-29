@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { ROOM_W, ROOM_H, PLAYER_BASE } from '@game/config';
 import type { Inventory, Item } from '@game/types';
-import { cloneItem } from '@game/items';
+import { cloneItem, ITEM_TEXTURE_PATHS } from '@game/items';
 import { craft } from '@game/recipes';
 import { Monster } from '@game/monster';
 import { createHUD, drawHUD, type HudElements } from '@ui/hud';
 
-interface GroundItem extends Phaser.GameObjects.Arc {
+interface GroundItem extends Phaser.GameObjects.Image {
   itemId: Item['id'];
   label: Phaser.GameObjects.Text;
 }
@@ -23,12 +23,12 @@ export class PlayScene extends Phaser.Scene {
   private fxDepth = 200;
   private aimAngle = -Math.PI / 2;
   private restockPoints = [
-    { x: 260, y: 560 },
-    { x: 980, y: 560 },
-    { x: 640, y: 260 },
-    { x: 720, y: 260 },
-    { x: 380, y: 720 },
-    { x: 680, y: 720 },
+    { x: 220, y: 480 },
+    { x: 1080, y: 480 },
+    { x: 640, y: 200 },
+    { x: 780, y: 320 },
+    { x: 420, y: 640 },
+    { x: 860, y: 640 },
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   constructor() { super('Play'); }
@@ -42,12 +42,16 @@ export class PlayScene extends Phaser.Scene {
       frameWidth: 128,
       frameHeight: 128,
     });
+
     this.load.atlas('furniture', 'assets/sprites/furniture.png', 'assets/sprites/furniture.json');
+
   }
 
   create() {
     this.resetPlayerState();
     this.createAnimations();
+
+    this.physics.world.setBounds(0, 0, ROOM_W, ROOM_H);
 
     // room bg
     this.add.rectangle(ROOM_W/2, ROOM_H/2, ROOM_W, ROOM_H, 0x161a22).setStrokeStyle(2, 0x2a3242);
@@ -75,10 +79,12 @@ export class PlayScene extends Phaser.Scene {
       return sprite;
     };
 
+
     createFurniture(660, 260, 'bed', 200, 200);
     createFurniture(260, 560, 'desk', 200, 90);
     createFurniture(980, 540, 'dresser', 80, 140);
     createFurniture(560, 720, 'rug', 200, 60);
+
 
     // player
     this.player = this.physics.add.sprite(200, 200, 'player', 16);
@@ -126,12 +132,12 @@ export class PlayScene extends Phaser.Scene {
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
     // starter items
-    this.createGroundItem(260, 560, 'knife');
-    this.createGroundItem(980, 560, 'bottle');
-    this.createGroundItem(640, 260, 'soda');
-    this.createGroundItem(720, 260, 'match');
-    this.createGroundItem(380, 720, 'bandaid');
-    this.createGroundItem(680, 720, 'yoyo');
+    this.createGroundItem(220, 480, 'knife');
+    this.createGroundItem(1080, 480, 'bottle');
+    this.createGroundItem(640, 200, 'soda');
+    this.createGroundItem(780, 320, 'match');
+    this.createGroundItem(420, 640, 'bandaid');
+    this.createGroundItem(860, 640, 'yoyo');
 
     this.time.addEvent({
       delay: 15000,
@@ -157,9 +163,11 @@ export class PlayScene extends Phaser.Scene {
     const idx = this.inv[0]? (this.inv[1]? -1 : 1) : 0;
     if (idx === -1) {
       // swap with slot 0 by default
-      const dropped = this.inv[0]!; this.inv[0] = { ...cloneItem(id) };
+      const dropped = this.inv[0]!;
+      this.inv[0] = { ...cloneItem(id) };
       obj.itemId = dropped.id; // leave the dropped one on ground
-      obj.label.setText(dropped.id);
+      obj.setTexture(dropped.icon);
+      obj.label.setText(dropped.label);
     } else {
       this.inv[idx] = { ...cloneItem(id) };
       obj.label.destroy();
@@ -302,27 +310,43 @@ export class PlayScene extends Phaser.Scene {
   }
 
   gainBottle(slot: 0|1) {
-    if (!this.inv[slot]) { this.inv[slot] = { id: 'bottle', label: 'Empty Bottle', uses: 1 }; return; }
+    if (!this.inv[slot]) { this.inv[slot] = cloneItem('bottle'); return; }
     // try other slot
     const other = slot === 0 ? 1 : 0;
-    if (!this.inv[other]) { this.inv[other] = { id: 'bottle', label: 'Empty Bottle', uses: 1 }; return; }
+    if (!this.inv[other]) { this.inv[other] = cloneItem('bottle'); return; }
     // drop
     this.createGroundItem(this.player.x + 8, this.player.y + 8, 'bottle');
   }
 
   private createGroundItem(x: number, y: number, id: Item['id']) {
-    const circle = this.add.circle(x, y, 8, 0x7cc7a1) as GroundItem;
-    circle.label = this.add.text(x, y - 18, id, { fontSize: '10px' }).setOrigin(0.5, 1);
-    circle.itemId = id;
-    this.physics.add.existing(circle, true);
-    this.configureItemBody(circle);
-    this.itemsGroup.add(circle);
-    return circle;
+    const template = cloneItem(id);
+    const sprite = this.add.image(x, y, template.icon) as GroundItem;
+    sprite.setDisplaySize(28, 28);
+    sprite.setDepth(6);
+    sprite.itemId = template.id;
+
+    const label = this.add
+      .text(x, y - 18, template.label, { fontSize: '10px' })
+      .setOrigin(0.5, 1);
+    label.setDepth(6);
+    sprite.label = label;
+    sprite.on('destroy', () => {
+      if (label.active) {
+        label.destroy();
+      }
+    });
+
+    this.physics.add.existing(sprite, true);
+    this.configureItemBody(sprite);
+    this.itemsGroup.add(sprite);
+    return sprite;
   }
 
   private configureItemBody(item: GroundItem) {
     const body = item.body as Phaser.Physics.Arcade.StaticBody;
-    body.setSize(16, 16).setOffset(-8, -8);
+    const width = item.displayWidth * 0.8;
+    const height = item.displayHeight * 0.8;
+    body.setSize(width, height).setOffset(-width / 2, -height / 2);
     body.updateFromGameObject();
   }
 
