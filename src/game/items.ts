@@ -41,4 +41,10 @@ export const BASE_ITEMS: Record<ItemId, Item> = {
   fizz_bomb: { id: 'fizz_bomb', label: 'Fizz Pop Bomb', uses: 1, icon: ITEM_TEXTURE_KEYS.fizz_bomb },
 };
 
-export function cloneItem(id: ItemId): Item { const b = BASE_ITEMS[id]; return { ...b, data: { ...(b.data||{}) } }; }
+export function cloneItem(id: ItemId): Item {
+  const b = BASE_ITEMS[id];
+  return {
+    ...b,
+    data: { initialUses: b.uses, ...(b.data || {}) },
+  };
+}
