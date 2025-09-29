@@ -92,36 +92,36 @@ export class PlayScene extends Phaser.Scene {
 
     // furniture (blocking)
 
-    const blocks = this.physics.add.staticGroup();
-    this.addFurnitureBlock(blocks, 320, 180, 360, 40, {
+    const furniture = this.physics.add.staticGroup();
+    this.addFurnitureBlock(furniture, 320, 180, 360, 40, {
       searchable: true,
       name: 'Bed',
       searchDuration: 2600,
       checkPoints: [0.85, 0.55, 0.25],
       findChance: 0.5,
     });
-    this.addFurnitureBlock(blocks, 320, 240, 360, 40, {
+    this.addFurnitureBlock(furniture, 320, 240, 360, 40, {
       searchable: true,
       name: 'Bed',
       searchDuration: 2600,
       checkPoints: [0.85, 0.55, 0.25],
       findChance: 0.5,
     });
-    this.addFurnitureBlock(blocks, 260, 540, 220, 60, {
+    this.addFurnitureBlock(furniture, 260, 540, 220, 60, {
       searchable: true,
       name: 'Desk',
       searchDuration: 2200,
       checkPoints: [0.75, 0.4],
       findChance: 0.6,
     });
-    this.addFurnitureBlock(blocks, 1040, 520, 160, 60, {
+    this.addFurnitureBlock(furniture, 1040, 520, 160, 60, {
       searchable: true,
       name: 'Dresser',
       searchDuration: 2400,
       checkPoints: [0.7, 0.35],
       findChance: 0.55,
     });
-    this.addFurnitureBlock(blocks, 700, 640, 420, 40); // rug edge (as blocker for proto)
+    this.addFurnitureBlock(furniture, 700, 640, 420, 40); // rug edge (as blocker for proto)
 
 
     // player
