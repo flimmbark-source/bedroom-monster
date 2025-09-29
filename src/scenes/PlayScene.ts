@@ -13,6 +13,18 @@ interface GroundItem extends Phaser.GameObjects.Image {
 
 type SearchCheckpoint = { value: number; triggered: boolean };
 
+type FurnitureSpriteOptions = {
+  frame: string;
+  offsetX?: number;
+  offsetY?: number;
+  depth?: number;
+  scale?: number;
+  scaleX?: number;
+  scaleY?: number;
+  flipX?: boolean;
+  flipY?: boolean;
+};
+
 type FurnitureOptions = {
   searchable?: boolean;
   name?: string;
@@ -21,6 +33,7 @@ type FurnitureOptions = {
   lootTable?: Item['id'][];
   findChance?: number;
   emoji?: string;
+  sprite?: FurnitureSpriteOptions;
 };
 
 type SearchableFurniture = {
@@ -108,6 +121,12 @@ export class PlayScene extends Phaser.Scene {
       checkPoints: [0.85, 0.55, 0.25],
       findChance: 0.5,
       emoji: '🛏️',
+      sprite: {
+        frame: 'bed',
+        offsetY: 30,
+        depth: 2,
+        scale: 1.3,
+      },
     });
     this.addFurnitureBlock(furniture, 320, 240, 360, 40, {
       searchable: true,
@@ -124,6 +143,12 @@ export class PlayScene extends Phaser.Scene {
       checkPoints: [0.75, 0.4],
       findChance: 0.6,
       emoji: '🪑',
+      sprite: {
+        frame: 'desk',
+        offsetY: -20,
+        depth: 2,
+        scale: 1.2,
+      },
     });
     this.addFurnitureBlock(furniture, 1040, 520, 160, 60, {
       searchable: true,
@@ -132,8 +157,22 @@ export class PlayScene extends Phaser.Scene {
       checkPoints: [0.7, 0.35],
       findChance: 0.55,
       emoji: '🧺',
+      sprite: {
+        frame: 'dresser',
+        offsetY: -30,
+        depth: 2,
+        scale: 1.4,
+      },
     });
-    this.addFurnitureBlock(furniture, 700, 640, 420, 40); // rug edge (as blocker for proto)
+    this.addFurnitureBlock(furniture, 700, 640, 420, 40, {
+      sprite: {
+        frame: 'rug',
+        offsetY: 10,
+        depth: 1,
+        scaleX: 2,
+        scaleY: 1,
+      },
+    }); // rug edge (as blocker for proto)
 
 
     // player
@@ -222,8 +261,36 @@ export class PlayScene extends Phaser.Scene {
     options: FurnitureOptions = {}
   ) {
     const rect = this.add.rectangle(x, y, w, h, 0x222831).setStrokeStyle(1, 0x3a4152);
+    rect.setVisible(false);
+    rect.setFillStyle(0x222831, 0);
+    rect.setStrokeStyle(0);
     this.physics.add.existing(rect, true);
     blocks.add(rect as any);
+
+    if (options.sprite) {
+      const {
+        frame,
+        offsetX = 0,
+        offsetY = 0,
+        depth = 3,
+        scale,
+        scaleX,
+        scaleY,
+        flipX = false,
+        flipY = false,
+      } = options.sprite;
+      const sprite = this.add.image(x + offsetX, y + offsetY, 'furniture', frame);
+      sprite.setOrigin(0.5, 0.5);
+      sprite.setDepth(depth);
+      sprite.setFlip(flipX, flipY);
+      if (typeof scale === 'number') {
+        sprite.setScale(scale);
+      } else {
+        const sx = scaleX ?? 1;
+        const sy = scaleY ?? scaleX ?? 1;
+        sprite.setScale(sx, sy);
+      }
+    }
 
     if (!options.searchable) return;
 
