@@ -20,6 +20,7 @@ type FurnitureOptions = {
   checkPoints?: number[];
   lootTable?: Item['id'][];
   findChance?: number;
+  emoji?: string;
 };
 
 type SearchableFurniture = {
@@ -29,6 +30,8 @@ type SearchableFurniture = {
   checkPoints: number[];
   lootTable: Item['id'][];
   findChance: number;
+  emoji: string;
+  emojiLabel: Phaser.GameObjects.Text;
 };
 
 export class PlayScene extends Phaser.Scene {
@@ -104,6 +107,7 @@ export class PlayScene extends Phaser.Scene {
       searchDuration: 2600,
       checkPoints: [0.85, 0.55, 0.25],
       findChance: 0.5,
+      emoji: '🛏️',
     });
     this.addFurnitureBlock(furniture, 320, 240, 360, 40, {
       searchable: true,
@@ -111,6 +115,7 @@ export class PlayScene extends Phaser.Scene {
       searchDuration: 2600,
       checkPoints: [0.85, 0.55, 0.25],
       findChance: 0.5,
+      emoji: '🛏️',
     });
     this.addFurnitureBlock(furniture, 260, 540, 220, 60, {
       searchable: true,
@@ -118,6 +123,7 @@ export class PlayScene extends Phaser.Scene {
       searchDuration: 2200,
       checkPoints: [0.75, 0.4],
       findChance: 0.6,
+      emoji: '🪑',
     });
     this.addFurnitureBlock(furniture, 1040, 520, 160, 60, {
       searchable: true,
@@ -125,6 +131,7 @@ export class PlayScene extends Phaser.Scene {
       searchDuration: 2400,
       checkPoints: [0.7, 0.35],
       findChance: 0.55,
+      emoji: '🧺',
     });
     this.addFurnitureBlock(furniture, 700, 640, 420, 40); // rug edge (as blocker for proto)
 
@@ -224,14 +231,43 @@ export class PlayScene extends Phaser.Scene {
       .filter((v) => v > 0 && v < 1)
       .sort((a, b) => b - a);
 
+    const name = options.name ?? 'Furniture';
+    const emoji = options.emoji ?? this.getFurnitureEmoji(name);
+    const labelY = y - h / 2 - 10;
+    const emojiLabel = this.add
+      .text(x, labelY, emoji, {
+        fontFamily: 'monospace',
+        fontSize: '20px',
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(6)
+      .setAlpha(0.3);
+    emojiLabel.setShadow(0, 2, '#000000', 6, true, true);
+
     this.furniture.push({
-      name: options.name ?? 'Furniture',
+      name,
       rect,
       searchDuration: options.searchDuration ?? 2400,
       checkPoints: checkpoints,
       lootTable: options.lootTable ?? this.restockPool,
       findChance: options.findChance ?? 0.5,
+      emoji,
+      emojiLabel,
     });
+  }
+
+  private getFurnitureEmoji(name: string) {
+    const key = name.trim().toLowerCase();
+    switch (key) {
+      case 'bed':
+        return '🛏️';
+      case 'desk':
+        return '🪑';
+      case 'dresser':
+        return '🧺';
+      default:
+        return '🔎';
+    }
   }
 
   tryPickup(): boolean {
@@ -381,6 +417,35 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.searchBar.setVisible(true);
+  }
+
+  private updateFurnitureIndicators() {
+    for (const furniture of this.furniture) {
+      if (!furniture.emojiLabel.active) continue;
+
+      const dist = this.distanceToRectangle(this.player.x, this.player.y, furniture.rect);
+      const isActive = this.activeFurniture === furniture && this.searching;
+      const hasInventorySpace = this.hasEmptyInventorySlot();
+      const nearby = dist <= 96;
+      const close = dist <= 56;
+
+      const targetAlpha = isActive ? 1 : close ? 0.95 : nearby ? 0.6 : 0.25;
+      furniture.emojiLabel.setAlpha(targetAlpha);
+
+      const targetScale = isActive ? 1.15 : close ? 1 : 0.9;
+      furniture.emojiLabel.setScale(targetScale);
+
+      if (hasInventorySpace) {
+        furniture.emojiLabel.setTint(0xffffff);
+      } else {
+        furniture.emojiLabel.setTint(0xff8383);
+      }
+
+      const text = isActive ? `🔎${furniture.emoji}` : furniture.emoji;
+      if (furniture.emojiLabel.text !== text) {
+        furniture.emojiLabel.setText(text);
+      }
+    }
   }
 
   private tryAwardSearchLoot() {
@@ -1140,7 +1205,8 @@ export class PlayScene extends Phaser.Scene {
     this.monster.update(delta/1000, this.player);
 
     // HUD
-    drawHUD(this.hud, this.hp, 5, this.inv);
+    drawHUD(this.hud, this.hp, PLAYER_BASE.hp, this.inv);
+    this.updateFurnitureIndicators();
   }
 
   private createAnimations() {
