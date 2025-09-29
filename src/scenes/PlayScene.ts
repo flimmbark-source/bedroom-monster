@@ -63,11 +63,11 @@ export class PlayScene extends Phaser.Scene {
   preload() {
     this.load.spritesheet('player', 'assets/sprites/player.png', {
       frameWidth: 102,
-      frameHeight: 128,
+      frameHeight: 152,
     });
     this.load.spritesheet('monster', 'assets/sprites/monster.png', {
-      frameWidth: 128,
-      frameHeight: 128,
+      frameWidth: 184,
+      frameHeight: 275,
     });
 
     this.load.atlas('furniture', 'assets/sprites/furniture.png', 'assets/sprites/furniture.json');
