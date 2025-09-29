@@ -67,7 +67,7 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
       'Mouse: Aim',
       'Left Click: Use Slot 1',
       'Right Click: Use Slot 2',
-      'E: Pick Up',
+      'E: Pick Up / Search',
       'G: Drop Item',
       'R: Craft',
     ].join('\n'),
