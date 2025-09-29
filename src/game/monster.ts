@@ -38,12 +38,36 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private hpBarBg: Phaser.GameObjects.Rectangle;
   private hpBarFill: Phaser.GameObjects.Rectangle;
   private hpBarWidth = 52;
+  private facing: 'up' | 'down' | 'left' | 'right' = 'down';
 
   setDepth(value: number): this {
     super.setDepth(value);
     if (this.hpBarBg) this.hpBarBg.setDepth(value + 3);
     if (this.hpBarFill) this.hpBarFill.setDepth(value + 4);
     return this;
+  }
+
+  private movementAnimKey(moving: boolean) {
+    return `monster-${moving ? 'walk' : 'idle'}-${this.facing}` as const;
+  }
+
+  private setFacingFromVector(dx: number, dy: number) {
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      this.facing = dx > 0 ? 'right' : 'left';
+    } else {
+      this.facing = dy > 0 ? 'down' : 'up';
+    }
+  }
+
+  private updateFacingFromVelocity() {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) return;
+    this.setFacingFromVector(body.velocity.x, body.velocity.y);
+  }
+
+  private playMovementAnimation(moving: boolean) {
+    this.anims.play(this.movementAnimKey(moving), true);
   }
 
   private showSweepTelegraph(
@@ -543,7 +567,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setCircle(42, 22, 42);
     this.setCollideWorldBounds(true);
-    this.anims.play('monster-idle');
+    this.playMovementAnimation(false);
     this.baseScale = { x: this.scaleX, y: this.scaleY };
 
     // HP bar visuals hover above the monster and track its current health.
@@ -591,7 +615,12 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     if (!this.actionLock && this.body) {
       const body = this.body as Phaser.Physics.Arcade.Body;
       const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
-      this.anims.play(moving ? 'monster-walk' : 'monster-idle', true);
+      if (moving) {
+        this.updateFacingFromVelocity();
+      } else if (player) {
+        this.setFacingFromVector(player.x - this.x, player.y - this.y);
+      }
+      this.playMovementAnimation(moving);
     }
 
     if (this.actionLock) return;
@@ -674,7 +703,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.setScale(this.baseScale.x, this.baseScale.y);
     this.setAngle(this.baseAngle);
     this.setTint(this.baseTint);
-    this.anims.play('monster-idle', true);
+    this.playMovementAnimation(false);
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
