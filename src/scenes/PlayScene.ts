@@ -1151,8 +1151,8 @@ export class PlayScene extends Phaser.Scene {
     const playerDirections: Record<'up' | 'down' | 'left' | 'right', number> = {
       up: 0,
       down: 1,
-      right: 2,
-      left: 3,
+      right: 3,
+      left: 2,
     };
 
     Object.entries(playerDirections).forEach(([dir, row]) => {
@@ -1173,8 +1173,8 @@ export class PlayScene extends Phaser.Scene {
 
     const monsterDirections: Record<'up' | 'down' | 'left' | 'right', number> = {
       down: 0,
-      left: 1,
-      right: 2,
+      left: 2,
+      right: 1,
       up: 3,
     };
 
