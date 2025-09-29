@@ -22,25 +22,31 @@ export class PlayScene extends Phaser.Scene {
   hud!: HudElements;
   private fxDepth = 200;
   private aimAngle = -Math.PI / 2;
+  private restockPoints = [
+    { x: 260, y: 560 },
+    { x: 980, y: 560 },
+    { x: 640, y: 260 },
+    { x: 720, y: 260 },
+    { x: 380, y: 720 },
+    { x: 680, y: 720 },
+  ];
+  private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   constructor() { super('Play'); }
 
   preload() {
-    // Generate simple placeholder textures so the scene always has visible sprites
-    if (!this.textures.exists('player-circle')) {
-      const gfx = this.make.graphics({ x: 0, y: 0, add: false });
-      gfx.fillStyle(0x88c0ff, 1);
-      gfx.fillCircle(16, 16, 16);
-      gfx.generateTexture('player-circle', 32, 32);
-      gfx.clear();
-      gfx.fillStyle(0xff8844, 1);
-      gfx.fillCircle(20, 20, 20);
-      gfx.generateTexture('monster-circle', 40, 40);
-      gfx.destroy();
-    }
+    this.load.spritesheet('player', 'assets/sprites/player.png', {
+      frameWidth: 64,
+      frameHeight: 105,
+    });
+    this.load.spritesheet('monster', 'assets/sprites/monster.png', {
+      frameWidth: 128,
+      frameHeight: 128,
+    });
   }
 
   create() {
     this.resetPlayerState();
+    this.createAnimations();
 
     // room bg
     this.add.rectangle(ROOM_W/2, ROOM_H/2, ROOM_W, ROOM_H, 0x161a22).setStrokeStyle(2, 0x2a3242);
@@ -59,11 +65,15 @@ export class PlayScene extends Phaser.Scene {
     addBlock(560, 700, 320, 40); // rug edge (as blocker for proto)
 
     // player
-    this.player = this.physics.add.sprite(200, 200, 'player-circle');
-    this.player.setDisplaySize(32, 32);
-    this.player.setCircle(14, 2, 2);
+    this.player = this.physics.add.sprite(200, 200, 'player', 16);
+    this.player.setScale(0.5);
+    const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+    playerBody.setSize(28, 32);
+    playerBody.setOffset(18, 66);
+    playerBody.maxSpeed = 260;
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
+    this.player.anims.play('player-idle');
     this.physics.add.collider(this.player, blocks);
 
     // monster
@@ -99,21 +109,19 @@ export class PlayScene extends Phaser.Scene {
 
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
-    const spawn = (x:number,y:number,id: Item['id']) => {
-      const circle = this.add.circle(x,y,8,0x7cc7a1) as GroundItem;
-      circle.label = this.add.text(x, y - 18, id, { fontSize: '10px' }).setOrigin(0.5,1);
-      circle.itemId = id;
-      this.physics.add.existing(circle, true);
-      this.configureItemBody(circle);
-      this.itemsGroup.add(circle);
-    };
     // starter items
-    spawn(260, 560, 'knife');
-    spawn(980, 560, 'bottle');
-    spawn(640, 260, 'soda');
-    spawn(720, 260, 'match');
-    spawn(380, 720, 'bandaid');
-    spawn(680, 720, 'yoyo');
+    this.createGroundItem(260, 560, 'knife');
+    this.createGroundItem(980, 560, 'bottle');
+    this.createGroundItem(640, 260, 'soda');
+    this.createGroundItem(720, 260, 'match');
+    this.createGroundItem(380, 720, 'bandaid');
+    this.createGroundItem(680, 720, 'yoyo');
+
+    this.time.addEvent({
+      delay: 15000,
+      loop: true,
+      callback: () => this.restockFurniture(),
+    });
 
     this.physics.add.overlap(this.player, this.itemsGroup, (_, obj:any) => {
       (this as any)._overItem = obj as GroundItem;
@@ -147,12 +155,7 @@ export class PlayScene extends Phaser.Scene {
   drop(slot: 0|1) {
     const it = this.inv[slot]; if (!it) return;
     this.inv[slot] = null;
-    const circle = this.add.circle(this.player.x + 14, this.player.y + 14, 8, 0x7cc7a1) as GroundItem;
-    circle.label = this.add.text(circle.x, circle.y - 18, it.id, { fontSize: '10px' }).setOrigin(0.5, 1);
-    circle.itemId = it.id;
-    this.physics.add.existing(circle, true);
-    this.configureItemBody(circle);
-    this.itemsGroup.add(circle);
+    this.createGroundItem(this.player.x + 14, this.player.y + 14, it.id);
   }
 
   use(slot: 0|1) {
@@ -288,18 +291,40 @@ export class PlayScene extends Phaser.Scene {
     const other = slot === 0 ? 1 : 0;
     if (!this.inv[other]) { this.inv[other] = { id: 'bottle', label: 'Empty Bottle', uses: 1 }; return; }
     // drop
-    const circle = this.add.circle(this.player.x + 8, this.player.y + 8, 8, 0x7cc7a1) as GroundItem;
-    circle.label = this.add.text(circle.x, circle.y - 18, 'bottle', { fontSize: '10px' }).setOrigin(0.5,1);
-    circle.itemId = 'bottle';
+    this.createGroundItem(this.player.x + 8, this.player.y + 8, 'bottle');
+  }
+
+  private createGroundItem(x: number, y: number, id: Item['id']) {
+    const circle = this.add.circle(x, y, 8, 0x7cc7a1) as GroundItem;
+    circle.label = this.add.text(x, y - 18, id, { fontSize: '10px' }).setOrigin(0.5, 1);
+    circle.itemId = id;
     this.physics.add.existing(circle, true);
     this.configureItemBody(circle);
     this.itemsGroup.add(circle);
+    return circle;
   }
 
   private configureItemBody(item: GroundItem) {
     const body = item.body as Phaser.Physics.Arcade.StaticBody;
     body.setSize(16, 16).setOffset(-8, -8);
     body.updateFromGameObject();
+  }
+
+  private restockFurniture() {
+    const items = this.itemsGroup.getChildren().filter((child) => child.active) as GroundItem[];
+    if (items.length >= 4) return;
+
+    const needed = Math.min(4 - items.length, this.restockPoints.length);
+    const availablePoints = this.restockPoints.filter((point) =>
+      !items.some((item) => Phaser.Math.Distance.Between(item.x, item.y, point.x, point.y) < 18)
+    );
+
+    for (let i = 0; i < needed && availablePoints.length > 0; i += 1) {
+      const index = Phaser.Math.Between(0, availablePoints.length - 1);
+      const point = availablePoints.splice(index, 1)[0];
+      const itemId = Phaser.Utils.Array.GetRandom(this.restockPool);
+      this.createGroundItem(point.x, point.y, itemId);
+    }
   }
 
   damagePlayer(n: number) {
@@ -790,6 +815,9 @@ export class PlayScene extends Phaser.Scene {
     if (this.cursors.up?.isDown) body.setVelocityY(-speed);
     if (this.cursors.down?.isDown) body.setVelocityY(speed);
 
+    const moving = body.velocity.lengthSq() > 0;
+    this.player.anims.play(moving ? 'player-walk' : 'player-idle', true);
+
     const overItem: GroundItem | null = (this as any)._overItem || null;
     if (overItem && (!overItem.active || !this.physics.overlap(this.player, overItem as any))) {
       (this as any)._overItem = null;
@@ -805,5 +833,43 @@ export class PlayScene extends Phaser.Scene {
 
     // HUD
     drawHUD(this.hud, this.hp, 5, this.inv);
+  }
+
+  private createAnimations() {
+    if (!this.anims.exists('player-idle')) {
+      this.anims.create({
+        key: 'player-idle',
+        frames: this.anims.generateFrameNumbers('player', { frames: [16, 17, 18, 19] }),
+        frameRate: 6,
+        repeat: -1,
+      });
+    }
+
+    if (!this.anims.exists('player-walk')) {
+      this.anims.create({
+        key: 'player-walk',
+        frames: this.anims.generateFrameNumbers('player', { start: 16, end: 23 }),
+        frameRate: 10,
+        repeat: -1,
+      });
+    }
+
+    if (!this.anims.exists('monster-idle')) {
+      this.anims.create({
+        key: 'monster-idle',
+        frames: this.anims.generateFrameNumbers('monster', { start: 0, end: 7 }),
+        frameRate: 5,
+        repeat: -1,
+      });
+    }
+
+    if (!this.anims.exists('monster-walk')) {
+      this.anims.create({
+        key: 'monster-walk',
+        frames: this.anims.generateFrameNumbers('monster', { start: 8, end: 15 }),
+        frameRate: 7,
+        repeat: -1,
+      });
+    }
   }
 }
