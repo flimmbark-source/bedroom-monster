@@ -683,6 +683,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
             telegraph.startPreWarn();
             this.spawnImpactEmoji(this.x, this.y - 36, '🌀', 0xffe6b3, timings.preWarn + timings.windUp);
           },
+
         },
         {
           duration: timings.windUp,
@@ -752,6 +753,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
             this.setTint(TELEGRAPH_COLORS.windUp);
             telegraph?.startWindUp();
           },
+
         },
       ],
       attack: [
@@ -913,6 +915,17 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       duration,
       ease: 'Sine.easeOut',
       onComplete: () => icon.destroy(),
+    });
+  }
+
+  private enterCooldownPose(tint: number) {
+    this.setTint(tint);
+    this.scene.tweens.add({
+      targets: this,
+      scaleX: { from: this.scaleX, to: 0.94 },
+      scaleY: { from: this.scaleY, to: 1.06 },
+      duration: 160,
+      ease: 'Sine.easeOut',
     });
   }
 
