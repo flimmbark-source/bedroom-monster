@@ -92,6 +92,7 @@ export class PlayScene extends Phaser.Scene {
   private playerSpeedBoostUntil = 0;
   private playerSpeedBoostMultiplier = 1;
   private playerKnockbackUntil = 0;
+  private readonly monsterFurnitureReleaseDelay = 60;
   constructor() { super('Play'); }
 
   preload() {
@@ -376,11 +377,11 @@ export class PlayScene extends Phaser.Scene {
     rect.setDataEnabled();
     const body = rect.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
-    body.setImmovable(true);
-    body.pushable = false;
+    body.setImmovable(false);
+    body.pushable = true;
     body.setMass(4);
     body.setDamping(true);
-    body.setDrag(1600, 1600);
+    body.setDrag(220, 220);
     body.setMaxSpeed(45);
     body.setCollideWorldBounds(true);
     blocks.add(rect as any);
@@ -419,6 +420,7 @@ export class PlayScene extends Phaser.Scene {
     rect.setData('spriteRef', sprite ?? null);
     rect.setData('spriteOffsetX', spriteOffsetX);
     rect.setData('spriteOffsetY', spriteOffsetY);
+    rect.setData('lastMonsterContactAt', 0);
 
     if (!options.searchable) return;
 
@@ -507,6 +509,17 @@ export class PlayScene extends Phaser.Scene {
     const playerBody = (playerObj.body as Phaser.Physics.Arcade.Body) ?? null;
     if (!furnitureBody || !playerBody) return;
     furnitureBody.setVelocity(0, 0);
+    
+
+    // Restore the player's previous frame position so the collision behaves
+    // like a solid barrier. This lets the furniture stay put for players while
+    // remaining pushable when the monster applies a force.
+    const prevPlayerX = playerBody.prev?.x ?? playerBody.position.x;
+    const prevPlayerY = playerBody.prev?.y ?? playerBody.position.y;
+    playerBody.position.set(prevPlayerX, prevPlayerY);
+    playerBody.prev.set(prevPlayerX, prevPlayerY);
+    playerBody.setVelocity(0, 0);
+
   }
 
   private handleMonsterFurnitureCollision(
@@ -518,38 +531,69 @@ export class PlayScene extends Phaser.Scene {
     const monster = monsterObj as Monster;
     const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
     if (!furnitureBody || !monsterBody) return;
-    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.02);
+    rect.setData('lastMonsterContactAt', this.time.now);
+    const isBeingPushed = this.applyFurniturePush(
+      furnitureBody,
+      monsterBody,
+      0.002,
+      monster.getPushIntent(),
+    );
     if (isBeingPushed) {
       monster.applyPushSlow(0.3);
 
     }
   }
 
+    private settleFurnitureAfterMonsterPush(currentTime: number) {
+    if (!this.furnitureGroup) return;
+    this.furnitureGroup.children.each((child) => {
+      const rect = child as Phaser.GameObjects.Rectangle;
+      const body = rect.body as Phaser.Physics.Arcade.Body | undefined;
+      if (!body) return;
+      const lastContact = (rect.getData('lastMonsterContactAt') as number) ?? 0;
+      if (currentTime - lastContact <= this.monsterFurnitureReleaseDelay) return;
+      const velX = body.velocity.x;
+      const velY = body.velocity.y;
+      if (velX !== 0 || velY !== 0) {
+        body.setVelocity(0, 0);
+      }
+    });
+  }
+
   private applyFurniturePush(
     furnitureBody: Phaser.Physics.Arcade.Body,
     sourceBody: Phaser.Physics.Arcade.Body,
     strengthScale = 1,
+    fallbackIntent?: Phaser.Math.Vector2,
   ) {
     const pushVector = new Phaser.Math.Vector2(sourceBody.velocity.x, sourceBody.velocity.y);
+    let sourceSpeedSq = pushVector.lengthSq();
 
     // When the monster collides with furniture, Arcade Physics immediately
     // zeroes out its velocity, which would prevent the push from registering.
     // Fall back to the distance it travelled during the last step so we still
     // have a usable push direction even if the current velocity is tiny.
-    if (pushVector.lengthSq() < 100) {
-      const deltaX = sourceBody.position.x - sourceBody.prev.x;
-      const deltaY = sourceBody.position.y - sourceBody.prev.y;
-      pushVector.set(deltaX, deltaY);
+    if (sourceSpeedSq < 100) {
+      if (fallbackIntent && fallbackIntent.lengthSq() > 0) {
+        pushVector.copy(fallbackIntent);
+      } else {
+        const deltaX = sourceBody.deltaX?.() ?? sourceBody.position.x - sourceBody.prev.x;
+        const deltaY = sourceBody.deltaY?.() ?? sourceBody.position.y - sourceBody.prev.y;
+        pushVector.set(deltaX, deltaY);
+      }
+      sourceSpeedSq = pushVector.lengthSq();
     }
 
-    if (pushVector.lengthSq() < 16) {
+    if (sourceSpeedSq < 16) {
       furnitureBody.setVelocity(0, 0);
       return false;
     }
 
-    pushVector.normalize().scale(35 * strengthScale);
-
-    const lerpFactor = 0.18 * strengthScale;
+    const sourceSpeed = Math.sqrt(sourceSpeedSq);
+    const cappedSpeed = Math.min(sourceSpeed * strengthScale, 32);
+    const targetSpeed = Math.max(cappedSpeed, 2.4);
+    pushVector.setLength(targetSpeed);
+    const lerpFactor = Phaser.Math.Clamp(0.25 + strengthScale * 0.5, 0.25, 0.55);
     furnitureBody.velocity.x = Phaser.Math.Linear(
       furnitureBody.velocity.x,
       pushVector.x,
@@ -1822,6 +1866,7 @@ export class PlayScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.keyCraft)) this.craft();
     }
 
+    this.settleFurnitureAfterMonsterPush(now);
     this.updateFurnitureVisuals();
     this.updateSearch(delta);
 
