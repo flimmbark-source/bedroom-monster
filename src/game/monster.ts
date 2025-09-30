@@ -913,17 +913,46 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
     // simple steering
     if (this.state === 'wander') {
-      this.scene.physics.moveToObject(this, player, this.speed * 0.6 * pushSlowFactor);
+      this.moveToward(player, this.speed * 0.6 * pushSlowFactor);
     } else if (this.state === 'chase') {
-      this.scene.physics.moveToObject(this, player, this.speed * 1.0 * pushSlowFactor);
+      this.moveToward(player, this.speed * 1.0 * pushSlowFactor);
     } else {
-      this.scene.physics.moveToObject(this, player, this.speed * 1.1 * pushSlowFactor);
+      this.moveToward(player, this.speed * 1.1 * pushSlowFactor);
       // pick an action; each handler manages its telegraph and cooldown timing
       if (this.cd.sweep === 0) { this.sweep(player); this.cd.sweep = this.actionT.sweep; }
       else if (this.cd.smash === 0) { this.smash(player); this.cd.smash = this.actionT.smash; }
       else if (this.cd.rush === 0) { this.rush(player); this.cd.rush = this.actionT.rush; }
       else if (this.cd.roar === 0) { this.roar(player); this.cd.roar = this.actionT.roar; }
     }
+  }
+
+  private moveToward(target: Phaser.Math.Vector2Like, speed: number) {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) return;
+
+    const direction = new Phaser.Math.Vector2(target.x - this.x, target.y - this.y);
+
+    if (direction.lengthSq() < 1) {
+      this.setVelocity(0, 0);
+      return;
+    }
+
+    direction.normalize().scale(speed);
+    this.setVelocity(direction.x, direction.y);
+  }
+
+  getPushIntent() {
+    return this.lastMoveIntent.clone();
+  }
+
+  override setVelocity(x = 0, y = 0) {
+    super.setVelocity(x, y);
+    if (x === 0 && y === 0) {
+      this.lastMoveIntent.set(0, 0);
+    } else {
+      this.lastMoveIntent.set(x, y);
+    }
+    return this;
   }
 
   private getHpBarY() {
