@@ -35,6 +35,21 @@ export type TelegraphImpact = {
   screenShake?: { duration: number; intensity: number };
 };
 
+export type MonsterHitboxDefinition = {
+  id: string;
+  part: string;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+  damageMultiplier?: number;
+};
+
+export type MonsterHitbox = MonsterHitboxDefinition & {
+  rect: Phaser.Geom.Rectangle;
+  damageMultiplier: number;
+};
+
 type ActiveTelegraph = {
   id: string;
   type: AttackType;
@@ -85,6 +100,26 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private hpBarWidth = 52;
   private facing: 'up' | 'down' | 'left' | 'right' = 'down';
   private pushSlowTimer = 0;
+  private hitboxDefs: MonsterHitboxDefinition[] = [
+    {
+      id: 'core',
+      part: 'core',
+      width: 96,
+      height: 158,
+      offsetX: 0,
+      offsetY: 12,
+      damageMultiplier: 1,
+    },
+  ];
+
+  override setVelocity(x?: number, y?: number): this {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) {
+      return this;
+    }
+    body.setVelocity(x ?? 0, typeof y === 'number' ? y : undefined);
+    return this;
+  }
 
   setDepth(value: number): this {
     super.setDepth(value);
@@ -152,13 +187,28 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     return telegraph;
   }
 
-  getTelegraphHitCandidates(player: Phaser.Physics.Arcade.Sprite): TelegraphHitCandidate[] {
-    const px = player.x;
-    const py = player.y;
+  getTelegraphHitCandidates(playerHitboxes: Phaser.Geom.Rectangle[]): TelegraphHitCandidate[] {
     const results: TelegraphHitCandidate[] = [];
     this.activeTelegraphs.forEach((telegraph) => {
       if (telegraph.phase !== 'commit' || telegraph.hasHitPlayer) return;
-      if (!telegraph.containsPoint(px, py)) return;
+      const hit = playerHitboxes.some((rect) => {
+        const corners = [
+          { x: rect.left, y: rect.top },
+          { x: rect.right, y: rect.top },
+          { x: rect.right, y: rect.bottom },
+          { x: rect.left, y: rect.bottom },
+        ];
+        if (corners.some((corner) => telegraph.containsPoint(corner.x, corner.y))) {
+          return true;
+        }
+        const centerX = rect.x + rect.width / 2;
+        const centerY = rect.y + rect.height / 2;
+        if (telegraph.containsPoint(centerX, centerY)) {
+          return true;
+        }
+        return false;
+      });
+      if (!hit) return;
       results.push({
         id: telegraph.id,
         priority: telegraph.priority,
@@ -166,6 +216,23 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       });
     });
     return results;
+  }
+
+  getHitboxes(): MonsterHitbox[] {
+    const scaleX = Math.abs(this.scaleX) || 1;
+    const scaleY = Math.abs(this.scaleY) || 1;
+    return this.hitboxDefs.map((def) => {
+      const width = def.width * scaleX;
+      const height = def.height * scaleY;
+      const x = this.x + def.offsetX * this.scaleX;
+      const y = this.y + def.offsetY * this.scaleY;
+      const rect = new Phaser.Geom.Rectangle(x - width / 2, y - height / 2, width, height);
+      return {
+        ...def,
+        rect,
+        damageMultiplier: def.damageMultiplier ?? 1,
+      };
+    });
   }
 
   resolveTelegraphHit(id: string) {
@@ -819,6 +886,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   update(dt: number, player: Phaser.Physics.Arcade.Sprite) {
     this.layoutHpBar();
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) {
+      return;
+    }
+
     this.pushSlowTimer = Math.max(0, this.pushSlowTimer - dt);
     const d = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
     this.state = d > 300 ? 'wander' : d > 140 ? 'chase' : 'engage';
@@ -829,8 +901,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     for (const k in this.cd) (this.cd as any)[k] = Math.max(0, (this.cd as any)[k] - dt);
 
     // maintain a gentle sway while walking unless a telegraph is running.
-    if (!this.actionLock && this.body) {
-      const speed = (this.body.velocity.length() || 0);
+    if (!this.actionLock) {
+      const speed = body.velocity.length() || 0;
       if (speed > 40) {
         this.idleTween?.pause();
         this.setScale(1.05, 0.95);
@@ -840,8 +912,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    if (!this.actionLock && this.body) {
-      const body = this.body as Phaser.Physics.Arcade.Body;
+    if (!this.actionLock) {
       const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
       if (moving) {
         this.updateFacingFromVelocity();

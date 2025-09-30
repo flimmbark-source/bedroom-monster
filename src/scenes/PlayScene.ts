@@ -3,7 +3,7 @@ import { ROOM_W, ROOM_H, PLAYER_BASE } from '@game/config';
 import type { Inventory, Item } from '@game/types';
 import { cloneItem, ITEM_TEXTURE_PATHS } from '@game/items';
 import { craft } from '@game/recipes';
-import { Monster, type TelegraphHitCandidate, type TelegraphImpact } from '@game/monster';
+import { Monster, type MonsterHitbox, type TelegraphHitCandidate, type TelegraphImpact } from '@game/monster';
 import { createHUD, drawHUD, type HudElements } from '@ui/hud';
 
 interface GroundItem extends Phaser.GameObjects.Image {
@@ -861,8 +861,9 @@ export class PlayScene extends Phaser.Scene {
     const range = 64;
     const halfAngle = Phaser.Math.DegToRad(45);
     this.showKnifeTelegraph(range, 0xb8e5ff, '🔪', Phaser.Math.DegToRad(90));
-    if (this.isMonsterWithinArc(range, halfAngle)) {
-      this.hitMonster(2, '💥');
+    const hits = this.getMonsterHitboxesWithinArc(range, halfAngle);
+    if (hits.length) {
+      this.hitMonster(2, '💥', hits);
     }
   }
 
@@ -870,8 +871,9 @@ export class PlayScene extends Phaser.Scene {
     const range = 96;
     const halfAngle = Phaser.Math.DegToRad(32);
     this.showMatchTelegraph(range, 70, 0xffa966, '🔥');
-    if (this.isMonsterWithinArc(range, halfAngle)) {
-      this.hitMonster(1, '🔥');
+    const hits = this.getMonsterHitboxesWithinArc(range, halfAngle);
+    if (hits.length) {
+      this.hitMonster(1, '🔥', hits);
     }
   }
 
@@ -879,8 +881,9 @@ export class PlayScene extends Phaser.Scene {
     const inner = 24;
     const outer = 78;
     this.showRingTelegraph(inner, outer, 0x6cc4ff, '🪀');
-    if (this.isMonsterWithinRing(inner, outer)) {
-      this.hitMonster(2, '💥');
+    const hits = this.getMonsterHitboxesWithinRing(inner, outer);
+    if (hits.length) {
+      this.hitMonster(2, '💥', hits);
     }
   }
 
@@ -888,8 +891,9 @@ export class PlayScene extends Phaser.Scene {
     const inner = 28;
     const outer = 92;
     this.showRingTelegraph(inner, outer, 0xffb347, '🌀', true);
-    if (this.isMonsterWithinRing(inner, outer)) {
-      this.hitMonster(3, '💥');
+    const hits = this.getMonsterHitboxesWithinRing(inner, outer);
+    if (hits.length) {
+      this.hitMonster(3, '💥', hits);
     }
   }
 
@@ -898,8 +902,9 @@ export class PlayScene extends Phaser.Scene {
     const halfAngle = Phaser.Math.DegToRad(18);
     const thickness = 16;
     this.showStabTelegraph(range, thickness, 0xfff1b6, '🗡️');
-    if (this.isMonsterWithinStrip(range, halfAngle, thickness * 0.5)) {
-      this.hitMonster(3, '💥');
+    const hits = this.getMonsterHitboxesWithinStrip(range, halfAngle, thickness * 0.5);
+    if (hits.length) {
+      this.hitMonster(3, '💥', hits);
     }
   }
 
@@ -914,43 +919,211 @@ export class PlayScene extends Phaser.Scene {
     const emoji = fire ? '🔥' : stun ? '💨' : '🍾';
     const tailEmoji = fire ? '🔥' : stun ? '💥' : undefined;
     this.showThrowTelegraph(range, color, emoji, fire ? 520 : 420, laneHalfWidth * 2, tailEmoji);
-    const aim = this.getAimAngle();
-    const aimDir = new Phaser.Math.Vector2(Math.cos(aim), Math.sin(aim));
-    const toTarget = new Phaser.Math.Vector2(this.monster.x - this.player.x, this.monster.y - this.player.y);
-    const along = toTarget.dot(aimDir);
-    const cross = toTarget.x * aimDir.y - toTarget.y * aimDir.x;
-
-    if (along > 0 && along <= range && Math.abs(cross) <= laneHalfWidth) {
-      this.hitMonster(dmg, fire ? '🔥' : stun ? '💫' : '💥');
-      if (stun) this.monster.setVelocity(0,0);
+    const hits = this.getMonsterHitboxesWithinLane(range, laneHalfWidth);
+    if (hits.length) {
+      this.hitMonster(dmg, fire ? '🔥' : stun ? '💫' : '💥', hits);
+      if (stun) this.monster.setVelocity(0, 0);
     }
   }
 
-  private isMonsterWithinArc(range: number, halfAngle: number) {
-    const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    if (d > range) return false;
-    const aim = this.getAimAngle();
-    const toTarget = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    const diff = Math.abs(Phaser.Math.Angle.Wrap(toTarget - aim));
-    return diff <= halfAngle;
+  private getMonsterHitboxes(): MonsterHitbox[] {
+    if (!this.monster) return [];
+    return this.monster.getHitboxes();
   }
 
-  private isMonsterWithinStrip(range: number, halfAngle: number, halfThickness: number) {
+  private getMonsterHitboxesWithinArc(range: number, halfAngle: number): MonsterHitbox[] {
     const aim = this.getAimAngle();
-    const aimDir = new Phaser.Math.Vector2(Math.cos(aim), Math.sin(aim));
-    const toTarget = new Phaser.Math.Vector2(this.monster.x - this.player.x, this.monster.y - this.player.y);
-    const along = toTarget.dot(aimDir);
-    if (along <= 0 || along > range) return false;
-    const angleToTarget = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    const diff = Math.abs(Phaser.Math.Angle.Wrap(angleToTarget - aim));
-    if (diff > halfAngle) return false;
-    const cross = toTarget.x * aimDir.y - toTarget.y * aimDir.x;
-    return Math.abs(cross) <= halfThickness;
+    const steps = Math.max(2, Math.ceil((halfAngle * 2) / Phaser.Math.DegToRad(12)));
+    const polygon = this.createSectorPolygon(this.player.x, this.player.y, range, aim, halfAngle, steps);
+    return this.getMonsterHitboxes().filter((hitbox) => this.rectIntersectsPolygon(hitbox.rect, polygon));
   }
 
-  private isMonsterWithinRing(inner: number, outer: number) {
-    const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.monster.x, this.monster.y);
-    return d >= inner && d <= outer;
+  private getMonsterHitboxesWithinStrip(range: number, halfAngle: number, halfThickness: number): MonsterHitbox[] {
+    const aim = this.getAimAngle();
+    const origin = new Phaser.Math.Vector2(this.player.x, this.player.y);
+    const polygon = this.createStripPolygon(origin, aim, range, halfThickness);
+    return this.getMonsterHitboxes().filter((hitbox) => {
+      if (!this.rectIntersectsPolygon(hitbox.rect, polygon)) {
+        return false;
+      }
+      if (halfAngle <= 0) {
+        return true;
+      }
+      return this.rectWithinAngle(hitbox.rect, origin.x, origin.y, aim, halfAngle);
+    });
+  }
+
+  private getMonsterHitboxesWithinRing(inner: number, outer: number): MonsterHitbox[] {
+    const originX = this.player.x;
+    const originY = this.player.y;
+    return this.getMonsterHitboxes().filter((hitbox) =>
+      this.ringIntersectsRect(hitbox.rect, originX, originY, inner, outer),
+    );
+  }
+
+  private getMonsterHitboxesWithinLane(range: number, halfWidth: number): MonsterHitbox[] {
+    const aim = this.getAimAngle();
+    const origin = new Phaser.Math.Vector2(this.player.x, this.player.y);
+    const polygon = this.createStripPolygon(origin, aim, range, halfWidth);
+    return this.getMonsterHitboxes().filter((hitbox) => this.rectIntersectsPolygon(hitbox.rect, polygon));
+  }
+
+  private createSectorPolygon(
+    originX: number,
+    originY: number,
+    radius: number,
+    angle: number,
+    halfAngle: number,
+    steps: number,
+  ): Phaser.Geom.Polygon {
+    const points: number[] = [originX, originY];
+    for (let i = 0; i <= steps; i += 1) {
+      const t = -halfAngle + (i / steps) * (halfAngle * 2);
+      const theta = angle + t;
+      points.push(originX + Math.cos(theta) * radius, originY + Math.sin(theta) * radius);
+    }
+    return new Phaser.Geom.Polygon(points);
+  }
+
+  private createStripPolygon(
+    origin: Phaser.Math.Vector2,
+    angle: number,
+    range: number,
+    halfThickness: number,
+  ): Phaser.Geom.Polygon {
+    const forward = new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle));
+    const side = new Phaser.Math.Vector2(-forward.y, forward.x);
+    const start = origin.clone();
+    const end = origin.clone().add(forward.clone().scale(range));
+    const p1 = start.clone().add(side.clone().scale(halfThickness));
+    const p2 = end.clone().add(side.clone().scale(halfThickness));
+    const p3 = end.clone().add(side.clone().scale(-halfThickness));
+    const p4 = start.clone().add(side.clone().scale(-halfThickness));
+    return new Phaser.Geom.Polygon([p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, p4.x, p4.y]);
+  }
+
+  private rectIntersectsPolygon(rect: Phaser.Geom.Rectangle, polygon: Phaser.Geom.Polygon): boolean {
+    const points = polygon.points;
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      if (Phaser.Geom.Rectangle.Contains(rect, point.x, point.y)) {
+        return true;
+      }
+    }
+
+    const corners = [
+      { x: rect.left, y: rect.top },
+      { x: rect.right, y: rect.top },
+      { x: rect.right, y: rect.bottom },
+      { x: rect.left, y: rect.bottom },
+    ];
+    for (let i = 0; i < corners.length; i += 1) {
+      const corner = corners[i];
+      if (Phaser.Geom.Polygon.Contains(polygon, corner.x, corner.y)) {
+        return true;
+      }
+    }
+
+    for (let i = 0; i < points.length; i += 1) {
+      const p1 = points[i];
+      const p2 = points[(i + 1) % points.length];
+      const edge = new Phaser.Geom.Line(p1.x, p1.y, p2.x, p2.y);
+      if (Phaser.Geom.Intersects.LineToRectangle(edge, rect)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private rectWithinAngle(
+    rect: Phaser.Geom.Rectangle,
+    originX: number,
+    originY: number,
+    angle: number,
+    halfAngle: number,
+  ): boolean {
+    const points = [
+      { x: rect.left, y: rect.top },
+      { x: rect.right, y: rect.top },
+      { x: rect.right, y: rect.bottom },
+      { x: rect.left, y: rect.bottom },
+      { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+    ];
+    return points.some((point) => {
+      const theta = Phaser.Math.Angle.Between(originX, originY, point.x, point.y);
+      const diff = Math.abs(Phaser.Math.Angle.Wrap(theta - angle));
+      return diff <= halfAngle;
+    });
+  }
+
+  private ringIntersectsRect(
+    rect: Phaser.Geom.Rectangle,
+    originX: number,
+    originY: number,
+    inner: number,
+    outer: number,
+  ): boolean {
+    const corners = [
+      { x: rect.left, y: rect.top },
+      { x: rect.right, y: rect.top },
+      { x: rect.right, y: rect.bottom },
+      { x: rect.left, y: rect.bottom },
+    ];
+
+    const insideOuter = corners.some((corner) =>
+      Phaser.Math.Distance.Between(corner.x, corner.y, originX, originY) <= outer,
+    );
+    if (insideOuter) {
+      const insideInner = corners.every((corner) =>
+        Phaser.Math.Distance.Between(corner.x, corner.y, originX, originY) <= inner,
+      );
+      if (insideInner) {
+        return false;
+      }
+      return true;
+    }
+
+    const clampedX = Phaser.Math.Clamp(originX, rect.left, rect.right);
+    const clampedY = Phaser.Math.Clamp(originY, rect.top, rect.bottom);
+    const dx = originX - clampedX;
+    const dy = originY - clampedY;
+    const distSq = dx * dx + dy * dy;
+    if (distSq > outer * outer) {
+      return false;
+    }
+
+    if (Phaser.Geom.Rectangle.Contains(rect, originX, originY)) {
+      return outer > inner;
+    }
+
+    if (distSq < inner * inner) {
+      const furthestCornerSq = corners.reduce((max, corner) => {
+        const ddx = originX - corner.x;
+        const ddy = originY - corner.y;
+        return Math.max(max, ddx * ddx + ddy * ddy);
+      }, 0);
+      return furthestCornerSq >= inner * inner;
+    }
+
+    return true;
+  }
+
+  private getPlayerHitboxes(): Phaser.Geom.Rectangle[] {
+    const body = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) {
+      const width = this.player.displayWidth;
+      const height = this.player.displayHeight;
+      return [
+        new Phaser.Geom.Rectangle(
+          this.player.x - width / 2,
+          this.player.y - height / 2,
+          width,
+          height,
+        ),
+      ];
+    }
+    return [new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height)];
   }
 
   gainBottle(slot: 0|1) {
@@ -1026,7 +1199,7 @@ export class PlayScene extends Phaser.Scene {
 
   private resolveTelegraphCollisions() {
     if (!this.player || !this.monster) return;
-    const candidates = this.monster.getTelegraphHitCandidates(this.player);
+    const candidates = this.monster.getTelegraphHitCandidates(this.getPlayerHitboxes());
     if (!candidates.length) return;
 
     const priority: Record<TelegraphHitCandidate['priority'], number> = {
@@ -1078,8 +1251,21 @@ export class PlayScene extends Phaser.Scene {
     this.playerKnockbackUntil = this.time.now + 160;
   }
 
-  hitMonster(n: number, emoji: string = '💥') {
-    this.monster.hp -= n;
+  hitMonster(baseDamage: number, emoji: string = '💥', hitboxes: MonsterHitbox[] = []) {
+    if (!this.monster) return;
+    const impacted = hitboxes.length ? hitboxes : this.getMonsterHitboxes();
+    if (!impacted.length) return;
+    const multiplier = impacted
+      .map((hitbox) => (hitbox.damageMultiplier ?? 1))
+      .reduce((max, value) => Math.max(max, value), 0);
+    if (multiplier <= 0) {
+      return;
+    }
+    const damage = Math.max(0, baseDamage * multiplier);
+    if (damage <= 0) {
+      return;
+    }
+    this.monster.hp -= damage;
     this.monster.refreshHpBar();
     this.monster.setTint(0xffdddd); this.time.delayedCall(80, () => this.monster.clearTint());
     this.spawnFloatingEmoji(this.monster.x, this.monster.y - 30, emoji, 26, 0xfff4d3);
