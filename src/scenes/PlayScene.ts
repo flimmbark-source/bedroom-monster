@@ -376,7 +376,8 @@ export class PlayScene extends Phaser.Scene {
     rect.setDataEnabled();
     const body = rect.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
-    body.setImmovable(false);
+    body.setImmovable(true);
+    body.pushable = false;
     body.setMass(4);
     body.setDamping(true);
     body.setDrag(1600, 1600);
@@ -505,10 +506,7 @@ export class PlayScene extends Phaser.Scene {
     const furnitureBody = (furnitureObj.body as Phaser.Physics.Arcade.Body) ?? null;
     const playerBody = (playerObj.body as Phaser.Physics.Arcade.Body) ?? null;
     if (!furnitureBody || !playerBody) return;
-
-
     furnitureBody.setVelocity(0, 0);
-
   }
 
   private handleMonsterFurnitureCollision(
@@ -520,15 +518,12 @@ export class PlayScene extends Phaser.Scene {
     const monster = monsterObj as Monster;
     const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
     if (!furnitureBody || !monsterBody) return;
-
-
-    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.1);
+    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.02);
     if (isBeingPushed) {
       monster.applyPushSlow(0.3);
 
     }
   }
-
 
   private applyFurniturePush(
     furnitureBody: Phaser.Physics.Arcade.Body,
@@ -554,7 +549,6 @@ export class PlayScene extends Phaser.Scene {
       pushVector.y,
       lerpFactor,
     );
-
 
     return true;
   }
