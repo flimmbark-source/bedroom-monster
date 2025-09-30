@@ -531,7 +531,18 @@ export class PlayScene extends Phaser.Scene {
     strengthScale = 1,
   ) {
     const pushVector = new Phaser.Math.Vector2(sourceBody.velocity.x, sourceBody.velocity.y);
+
+    // When the monster collides with furniture, Arcade Physics immediately
+    // zeroes out its velocity, which would prevent the push from registering.
+    // Fall back to the distance it travelled during the last step so we still
+    // have a usable push direction even if the current velocity is tiny.
     if (pushVector.lengthSq() < 100) {
+      const deltaX = sourceBody.position.x - sourceBody.prev.x;
+      const deltaY = sourceBody.position.y - sourceBody.prev.y;
+      pushVector.set(deltaX, deltaY);
+    }
+
+    if (pushVector.lengthSq() < 16) {
       furnitureBody.setVelocity(0, 0);
       return false;
     }
