@@ -1657,9 +1657,13 @@ export class PlayScene extends Phaser.Scene {
         frameRate: 1,
         repeat: -1,
       });
+      const walkFrames = this.anims
+        .generateFrameNumbers('player', { start: base, end: base + 3 })
+        .slice();
+      const adjustedWalkFrames = dir === 'up' || dir === 'down' ? walkFrames.reverse() : walkFrames;
       ensureAnimation(`player-walk-${dir}`, {
         key: `player-walk-${dir}`,
-        frames: this.anims.generateFrameNumbers('player', { start: base, end: base + 3 }),
+        frames: adjustedWalkFrames,
         frameRate: 10,
         repeat: -1,
       });
