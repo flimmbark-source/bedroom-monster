@@ -376,11 +376,11 @@ export class PlayScene extends Phaser.Scene {
     rect.setDataEnabled();
     const body = rect.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
-    body.setImmovable(true);
+    body.setImmovable(false);
     body.pushable = false;
     body.setMass(4);
     body.setDamping(true);
-    body.setDrag(1600, 1600);
+    body.setDrag(220, 220);
     body.setMaxSpeed(45);
     body.setCollideWorldBounds(true);
     blocks.add(rect as any);
@@ -521,7 +521,9 @@ export class PlayScene extends Phaser.Scene {
     const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.02);
     if (isBeingPushed) {
       monster.applyPushSlow(0.3);
-
+    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.05);
+    if (isBeingPushed) {
+      monster.applyPushSlow(0.3);
     }
   }
 
@@ -531,25 +533,18 @@ export class PlayScene extends Phaser.Scene {
     strengthScale = 1,
   ) {
     const pushVector = new Phaser.Math.Vector2(sourceBody.velocity.x, sourceBody.velocity.y);
-
-    // When the monster collides with furniture, Arcade Physics immediately
-    // zeroes out its velocity, which would prevent the push from registering.
-    // Fall back to the distance it travelled during the last step so we still
-    // have a usable push direction even if the current velocity is tiny.
-    if (pushVector.lengthSq() < 100) {
-      const deltaX = sourceBody.position.x - sourceBody.prev.x;
-      const deltaY = sourceBody.position.y - sourceBody.prev.y;
-      pushVector.set(deltaX, deltaY);
-    }
-
-    if (pushVector.lengthSq() < 16) {
+    const sourceSpeedSq = pushVector.lengthSq();
+    if (sourceSpeedSq < 100) {
       furnitureBody.setVelocity(0, 0);
       return false;
     }
 
-    pushVector.normalize().scale(35 * strengthScale);
-
-    const lerpFactor = 0.18 * strengthScale;
+    const sourceSpeed = Math.sqrt(sourceSpeedSq);
+    const cappedSpeed = Math.min(sourceSpeed * strengthScale, 32);
+    const targetSpeed = Math.max(cappedSpeed, 2.4);
+    pushVector.setLength(targetSpeed);
+    
+    const lerpFactor = Phaser.Math.Clamp(0.25 + strengthScale * 0.5, 0.25, 0.55);
     furnitureBody.velocity.x = Phaser.Math.Linear(
       furnitureBody.velocity.x,
       pushVector.x,
