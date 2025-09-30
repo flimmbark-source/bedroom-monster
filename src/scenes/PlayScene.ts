@@ -506,7 +506,6 @@ export class PlayScene extends Phaser.Scene {
     const furnitureBody = (furnitureObj.body as Phaser.Physics.Arcade.Body) ?? null;
     const playerBody = (playerObj.body as Phaser.Physics.Arcade.Body) ?? null;
     if (!furnitureBody || !playerBody) return;
-
     furnitureBody.setVelocity(0, 0);
   }
 
@@ -519,10 +518,10 @@ export class PlayScene extends Phaser.Scene {
     const monster = monsterObj as Monster;
     const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
     if (!furnitureBody || !monsterBody) return;
-
     const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.02);
     if (isBeingPushed) {
       monster.applyPushSlow(0.3);
+
     }
   }
 
