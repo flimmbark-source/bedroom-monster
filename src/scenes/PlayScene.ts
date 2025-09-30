@@ -506,7 +506,9 @@ export class PlayScene extends Phaser.Scene {
     const playerBody = (playerObj.body as Phaser.Physics.Arcade.Body) ?? null;
     if (!furnitureBody || !playerBody) return;
 
-    this.applyFurniturePush(furnitureBody, playerBody);
+
+    furnitureBody.setVelocity(0, 0);
+
   }
 
   private handleMonsterFurnitureCollision(
@@ -519,15 +521,19 @@ export class PlayScene extends Phaser.Scene {
     const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
     if (!furnitureBody || !monsterBody) return;
 
-    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody);
+
+    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.1);
     if (isBeingPushed) {
       monster.applyPushSlow(0.3);
+
     }
   }
+
 
   private applyFurniturePush(
     furnitureBody: Phaser.Physics.Arcade.Body,
     sourceBody: Phaser.Physics.Arcade.Body,
+    strengthScale = 1,
   ) {
     const pushVector = new Phaser.Math.Vector2(sourceBody.velocity.x, sourceBody.velocity.y);
     if (pushVector.lengthSq() < 100) {
@@ -535,10 +541,20 @@ export class PlayScene extends Phaser.Scene {
       return false;
     }
 
-    pushVector.normalize().scale(35);
+    pushVector.normalize().scale(35 * strengthScale);
 
-    furnitureBody.velocity.x = Phaser.Math.Linear(furnitureBody.velocity.x, pushVector.x, 0.18);
-    furnitureBody.velocity.y = Phaser.Math.Linear(furnitureBody.velocity.y, pushVector.y, 0.18);
+    const lerpFactor = 0.18 * strengthScale;
+    furnitureBody.velocity.x = Phaser.Math.Linear(
+      furnitureBody.velocity.x,
+      pushVector.x,
+      lerpFactor,
+    );
+    furnitureBody.velocity.y = Phaser.Math.Linear(
+      furnitureBody.velocity.y,
+      pushVector.y,
+      lerpFactor,
+    );
+
 
     return true;
   }
