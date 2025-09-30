@@ -506,7 +506,6 @@ export class PlayScene extends Phaser.Scene {
     const furnitureBody = (furnitureObj.body as Phaser.Physics.Arcade.Body) ?? null;
     const playerBody = (playerObj.body as Phaser.Physics.Arcade.Body) ?? null;
     if (!furnitureBody || !playerBody) return;
-
     furnitureBody.setVelocity(0, 0);
   }
 
@@ -519,7 +518,9 @@ export class PlayScene extends Phaser.Scene {
     const monster = monsterObj as Monster;
     const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
     if (!furnitureBody || !monsterBody) return;
-
+    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.02);
+    if (isBeingPushed) {
+      monster.applyPushSlow(0.3);
     const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.05);
     if (isBeingPushed) {
       monster.applyPushSlow(0.3);
@@ -542,7 +543,7 @@ export class PlayScene extends Phaser.Scene {
     const cappedSpeed = Math.min(sourceSpeed * strengthScale, 32);
     const targetSpeed = Math.max(cappedSpeed, 2.4);
     pushVector.setLength(targetSpeed);
-
+    
     const lerpFactor = Phaser.Math.Clamp(0.25 + strengthScale * 0.5, 0.25, 0.55);
     furnitureBody.velocity.x = Phaser.Math.Linear(
       furnitureBody.velocity.x,
@@ -1662,9 +1663,13 @@ export class PlayScene extends Phaser.Scene {
         frameRate: 1,
         repeat: -1,
       });
+      const walkFrames = this.anims
+        .generateFrameNumbers('player', { start: base, end: base + 3 })
+        .slice();
+      const adjustedWalkFrames = dir === 'up' || dir === 'down' ? walkFrames.reverse() : walkFrames;
       ensureAnimation(`player-walk-${dir}`, {
         key: `player-walk-${dir}`,
-        frames: this.anims.generateFrameNumbers('player', { start: base, end: base + 3 }),
+        frames: adjustedWalkFrames,
         frameRate: 10,
         repeat: -1,
       });
