@@ -268,7 +268,13 @@ export class PlayScene extends Phaser.Scene {
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
     this.player.anims.play('player-idle-down');
-    this.physics.add.collider(this.player, furniture);
+    this.physics.add.collider(
+      this.player,
+      furniture,
+      this.handlePlayerFurnitureCollision,
+      undefined,
+      this,
+    );
     this.physics.add.collider(furniture, furniture);
 
     // monster
@@ -370,9 +376,12 @@ export class PlayScene extends Phaser.Scene {
     rect.setDataEnabled();
     const body = rect.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
-    body.setImmovable(false);
-    body.setDrag(800, 800);
-    body.setMaxSpeed(70);
+    body.setImmovable(true);
+    body.pushable = false;
+    body.setMass(4);
+    body.setDamping(true);
+    body.setDrag(1600, 1600);
+    body.setMaxSpeed(45);
     body.setCollideWorldBounds(true);
     blocks.add(rect as any);
 
@@ -490,6 +499,17 @@ export class PlayScene extends Phaser.Scene {
     };
   }
 
+  private handlePlayerFurnitureCollision(
+    playerObj: Phaser.GameObjects.GameObject,
+    furnitureObj: Phaser.GameObjects.GameObject,
+  ) {
+    const furnitureBody = (furnitureObj.body as Phaser.Physics.Arcade.Body) ?? null;
+    const playerBody = (playerObj.body as Phaser.Physics.Arcade.Body) ?? null;
+    if (!furnitureBody || !playerBody) return;
+
+    furnitureBody.setVelocity(0, 0);
+  }
+
   private handleMonsterFurnitureCollision(
     monsterObj: Phaser.GameObjects.GameObject,
     furnitureObj: Phaser.GameObjects.GameObject,
@@ -500,17 +520,38 @@ export class PlayScene extends Phaser.Scene {
     const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
     if (!furnitureBody || !monsterBody) return;
 
-    const pushVector = new Phaser.Math.Vector2(monsterBody.velocity.x, monsterBody.velocity.y);
-    if (pushVector.lengthSq() < 25) {
-      return;
+    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.02);
+    if (isBeingPushed) {
+      monster.applyPushSlow(0.3);
+    }
+  }
+
+  private applyFurniturePush(
+    furnitureBody: Phaser.Physics.Arcade.Body,
+    sourceBody: Phaser.Physics.Arcade.Body,
+    strengthScale = 1,
+  ) {
+    const pushVector = new Phaser.Math.Vector2(sourceBody.velocity.x, sourceBody.velocity.y);
+    if (pushVector.lengthSq() < 100) {
+      furnitureBody.setVelocity(0, 0);
+      return false;
     }
 
-    pushVector.normalize().scale(60);
+    pushVector.normalize().scale(35 * strengthScale);
 
-    furnitureBody.velocity.x = Phaser.Math.Linear(furnitureBody.velocity.x, pushVector.x, 0.4);
-    furnitureBody.velocity.y = Phaser.Math.Linear(furnitureBody.velocity.y, pushVector.y, 0.4);
+    const lerpFactor = 0.18 * strengthScale;
+    furnitureBody.velocity.x = Phaser.Math.Linear(
+      furnitureBody.velocity.x,
+      pushVector.x,
+      lerpFactor,
+    );
+    furnitureBody.velocity.y = Phaser.Math.Linear(
+      furnitureBody.velocity.y,
+      pushVector.y,
+      lerpFactor,
+    );
 
-    monster.applyPushSlow(0.3);
+    return true;
   }
 
   private getFurnitureScale(spriteOptions: FurnitureSpriteOptions | undefined) {
