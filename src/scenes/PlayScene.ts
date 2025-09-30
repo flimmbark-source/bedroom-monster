@@ -376,11 +376,11 @@ export class PlayScene extends Phaser.Scene {
     rect.setDataEnabled();
     const body = rect.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
-    body.setImmovable(true);
+    body.setImmovable(false);
     body.pushable = false;
     body.setMass(4);
     body.setDamping(true);
-    body.setDrag(1600, 1600);
+    body.setDrag(220, 220);
     body.setMaxSpeed(45);
     body.setCollideWorldBounds(true);
     blocks.add(rect as any);
@@ -559,9 +559,11 @@ export class PlayScene extends Phaser.Scene {
       return false;
     }
 
-    pushVector.normalize().scale(35 * strengthScale);
-
-    const lerpFactor = 0.18 * strengthScale;
+    const sourceSpeed = Math.sqrt(sourceSpeedSq);
+    const cappedSpeed = Math.min(sourceSpeed * strengthScale, 32);
+    const targetSpeed = Math.max(cappedSpeed, 2.4);
+    pushVector.setLength(targetSpeed);
+    const lerpFactor = Phaser.Math.Clamp(0.25 + strengthScale * 0.5, 0.25, 0.55);
     furnitureBody.velocity.x = Phaser.Math.Linear(
       furnitureBody.velocity.x,
       pushVector.x,
