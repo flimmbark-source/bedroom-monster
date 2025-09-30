@@ -100,6 +100,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private hpBarWidth = 52;
   private facing: 'up' | 'down' | 'left' | 'right' = 'down';
   private pushSlowTimer = 0;
+  private lastMoveIntent = new Phaser.Math.Vector2(0, 0);
   private hitboxDefs: MonsterHitboxDefinition[] = [
     {
       id: 'core',
@@ -111,16 +112,6 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       damageMultiplier: 1,
     },
   ];
-
-
-  override setVelocity(x?: number, y?: number): this {
-    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
-    if (!body) {
-      return this;
-    }
-    body.setVelocity(x ?? 0, typeof y === 'number' ? y : undefined);
-    return this;
-  }
 
 
   setDepth(value: number): this {
