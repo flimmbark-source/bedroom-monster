@@ -518,7 +518,12 @@ export class PlayScene extends Phaser.Scene {
     const monster = monsterObj as Monster;
     const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
     if (!furnitureBody || !monsterBody) return;
-    const isBeingPushed = this.applyFurniturePush(furnitureBody, monsterBody, 0.02);
+    const isBeingPushed = this.applyFurniturePush(
+      furnitureBody,
+      monsterBody,
+      0.02,
+      monster.getPushIntent(),
+    );
     if (isBeingPushed) {
       monster.applyPushSlow(0.3);
 
@@ -529,9 +534,27 @@ export class PlayScene extends Phaser.Scene {
     furnitureBody: Phaser.Physics.Arcade.Body,
     sourceBody: Phaser.Physics.Arcade.Body,
     strengthScale = 1,
+    fallbackIntent?: Phaser.Math.Vector2,
   ) {
     const pushVector = new Phaser.Math.Vector2(sourceBody.velocity.x, sourceBody.velocity.y);
-    if (pushVector.lengthSq() < 100) {
+    let sourceSpeedSq = pushVector.lengthSq();
+
+    // When the monster collides with furniture, Arcade Physics immediately
+    // zeroes out its velocity, which would prevent the push from registering.
+    // Fall back to the distance it travelled during the last step so we still
+    // have a usable push direction even if the current velocity is tiny.
+    if (sourceSpeedSq < 100) {
+      if (fallbackIntent && fallbackIntent.lengthSq() > 0) {
+        pushVector.copy(fallbackIntent);
+      } else {
+        const deltaX = sourceBody.deltaX?.() ?? sourceBody.position.x - sourceBody.prev.x;
+        const deltaY = sourceBody.deltaY?.() ?? sourceBody.position.y - sourceBody.prev.y;
+        pushVector.set(deltaX, deltaY);
+      }
+      sourceSpeedSq = pushVector.lengthSq();
+    }
+
+    if (sourceSpeedSq < 16) {
       furnitureBody.setVelocity(0, 0);
       return false;
     }
