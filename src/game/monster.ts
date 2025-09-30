@@ -112,6 +112,17 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     },
   ];
 
+
+  override setVelocity(x?: number, y?: number): this {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) {
+      return this;
+    }
+    body.setVelocity(x ?? 0, typeof y === 'number' ? y : undefined);
+    return this;
+  }
+
+
   setDepth(value: number): this {
     super.setDepth(value);
     if (this.hpBarBg) this.hpBarBg.setDepth(value + 3);
@@ -877,6 +888,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   update(dt: number, player: Phaser.Physics.Arcade.Sprite) {
     this.layoutHpBar();
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) {
+      return;
+    }
+
     this.pushSlowTimer = Math.max(0, this.pushSlowTimer - dt);
     const d = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
     this.state = d > 300 ? 'wander' : d > 140 ? 'chase' : 'engage';
@@ -887,8 +903,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     for (const k in this.cd) (this.cd as any)[k] = Math.max(0, (this.cd as any)[k] - dt);
 
     // maintain a gentle sway while walking unless a telegraph is running.
-    if (!this.actionLock && this.body) {
-      const speed = (this.body.velocity.length() || 0);
+    if (!this.actionLock) {
+      const speed = body.velocity.length() || 0;
       if (speed > 40) {
         this.idleTween?.pause();
         this.setScale(1.05, 0.95);
@@ -898,8 +914,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    if (!this.actionLock && this.body) {
-      const body = this.body as Phaser.Physics.Arcade.Body;
+    if (!this.actionLock) {
       const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
       if (moving) {
         this.updateFacingFromVelocity();
