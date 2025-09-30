@@ -377,7 +377,7 @@ export class PlayScene extends Phaser.Scene {
     const body = rect.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
     body.setImmovable(false);
-    body.pushable = false;
+    body.pushable = true;
     body.setMass(4);
     body.setDamping(true);
     body.setDrag(220, 220);
