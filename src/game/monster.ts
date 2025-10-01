@@ -109,6 +109,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private walkStretchActive = false;
   private readonly walkStretchEnterSpeed = 60;
   private readonly walkStretchExitSpeed = 25;
+  private burningUntil = 0;
   private hitboxDefs: MonsterHitboxDefinition[] = [
     {
       id: 'core',
@@ -164,8 +165,20 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     return this.enraged;
   }
 
+  private isBurningActive() {
+    return this.scene.time.now < this.burningUntil;
+  }
+
+  private getStatusSpeedMultiplier() {
+    return this.isBurningActive() ? 0.9 : 1;
+  }
+
   private getMoveSpeed() {
-    return this.baseMoveSpeed * (this.isEnraged() ? this.rageSpeedMultiplier : 1);
+    return (
+      this.baseMoveSpeed *
+      (this.isEnraged() ? this.rageSpeedMultiplier : 1) *
+      this.getStatusSpeedMultiplier()
+    );
   }
 
   startSpawnBurst(direction: Phaser.Math.Vector2Like, speed: number, duration: number) {
@@ -175,7 +188,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     const burstDirection = new Phaser.Math.Vector2(direction.x, direction.y);
     if (burstDirection.lengthSq() === 0) return;
 
-    burstDirection.normalize().scale(speed);
+    burstDirection.normalize().scale(speed * this.getStatusSpeedMultiplier());
     this.setVelocity(burstDirection.x, burstDirection.y);
     this.spawnBurstTimer = duration;
     this.updateFacingFromVelocity();
@@ -198,6 +211,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       commit: timings.commit / scale,
       recovery: timings.recovery / scale,
     };
+  }
+
+  private emitTelegraphSfx(key: 'whoosh' | 'rise' | 'crack' | 'thud') {
+    this.scene.events.emit('play-sfx', key);
   }
 
   private registerTelegraph(
@@ -400,6 +417,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.fillAlpha = 0.4;
         state.strokeAlpha = 0.7;
         state.strokeWidth = 5;
+        this.emitTelegraphSfx('whoosh');
         draw();
       },
       startWindUp: () => {
@@ -409,6 +427,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.fillAlpha = 0.65;
         state.strokeAlpha = 0.95;
         state.strokeWidth = 7.5;
+        this.emitTelegraphSfx('rise');
         draw();
         stopPulse();
         pulse = this.scene.tweens.addCounter({
@@ -433,6 +452,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.fillAlpha = 1;
         state.strokeAlpha = 1;
         state.strokeWidth = 8;
+        this.emitTelegraphSfx('crack');
         draw();
         this.scene.tweens.add({
           targets: state,
@@ -540,6 +560,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         target.scale = 0.75;
         fill.setFillStyle(TELEGRAPH_COLORS.preWarn, 0.4);
         outline.setStrokeStyle(6, TELEGRAPH_COLORS.preWarn, 0.75);
+        this.emitTelegraphSfx('whoosh');
         this.scene.tweens.add({
           targets: target,
           scale: 0.92,
@@ -554,6 +575,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         fill.setFillStyle(TELEGRAPH_COLORS.windUp, 0.65);
         outline.setStrokeStyle(9, TELEGRAPH_COLORS.windUp, 0.95);
         stopPulse();
+        this.emitTelegraphSfx('rise');
         pulse = this.scene.tweens.add({
           targets: target,
           scale: { from: 1.02, to: 0.9 },
@@ -571,6 +593,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         outline.setStrokeStyle(10, TELEGRAPH_COLORS.commit, 1);
         fill.setAlpha(1);
         outline.setAlpha(1);
+        this.emitTelegraphSfx('crack');
         updatePosition();
         this.scene.tweens.add({
           targets: [fill, outline],
@@ -703,6 +726,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.fillAlpha = 0.4;
         state.strokeAlpha = 0.75;
         state.strokeWidth = 5;
+        this.emitTelegraphSfx('whoosh');
         draw();
       },
       startWindUp: () => {
@@ -714,6 +738,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.fillAlpha = 0.65;
         state.strokeAlpha = 0.95;
         state.strokeWidth = 7.5;
+        this.emitTelegraphSfx('rise');
         draw();
         stopPulse();
         pulse = this.scene.tweens.addCounter({
@@ -738,6 +763,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.fillAlpha = 0.95;
         state.strokeAlpha = 1;
         state.strokeWidth = 8;
+        this.emitTelegraphSfx('crack');
         draw();
         this.scene.tweens.add({
           targets: state,
@@ -746,10 +772,9 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Quad.easeOut',
           onUpdate: draw,
         });
-        const v = this.scene.physics.velocityFromRotation(
-          lockedAngle,
-          340 * (this.isEnraged() ? this.rageSpeedMultiplier : 1),
-        );
+        const rushSpeed =
+          340 * (this.isEnraged() ? this.rageSpeedMultiplier : 1) * this.getStatusSpeedMultiplier();
+        const v = this.scene.physics.velocityFromRotation(lockedAngle, rushSpeed);
         this.setVelocity(v.x, v.y);
       },
       startRecovery: () => {
@@ -846,6 +871,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         ring.setScale(0.94);
         outerEdge.setScale(0.94);
         innerEdge.setScale(0.94);
+        this.emitTelegraphSfx('whoosh');
       },
       startWindUp: () => {
         telegraph.setPhase('windUp');
@@ -853,6 +879,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         outerEdge.setStrokeStyle(6, TELEGRAPH_COLORS.windUp, 0.95);
         innerEdge.setStrokeStyle(3, TELEGRAPH_COLORS.windUp, 0.85);
         stopPulse();
+        this.emitTelegraphSfx('rise');
         pulse = this.scene.tweens.add({
           targets: [ring, outerEdge, innerEdge],
           scale: { from: 1.03, to: 0.97 },
@@ -871,6 +898,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         ring.setAlpha(1);
         outerEdge.setAlpha(1);
         innerEdge.setAlpha(1);
+        this.emitTelegraphSfx('crack');
         this.scene.tweens.add({
           targets: [ring, outerEdge, innerEdge],
           alpha: { from: 1, to: 0.72 },
@@ -1139,6 +1167,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   applyPushSlow(duration = 0.3) {
     this.pushSlowTimer = Math.max(this.pushSlowTimer, duration);
+  }
+
+  applyBurning(durationMs: number) {
+    const until = this.scene.time.now + durationMs;
+    this.burningUntil = Math.max(this.burningUntil, until);
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
