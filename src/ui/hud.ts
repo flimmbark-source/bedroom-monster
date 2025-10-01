@@ -1,9 +1,15 @@
-// ui/hud.ts  (replace the file contents with this version)
-
 import type Phaser from 'phaser';
 import { ROOM_W } from '@game/config';
-import { ITEM_TEXTURE_KEYS } from '@game/items';
 import type { Inventory, Item } from '@game/types';
+import { BASE_ITEMS } from '@game/items';
+import { craft } from '@game/recipes';
+
+// If you have a unified items spritesheet, map item ids -> frame index here.
+// Otherwise leave empty and we'll fall back to per-item textures.
+const ITEM_FRAME: Partial<Record<Item['id'], number>> = {
+  match: 0, knife: 1, soda: 2, bottle: 3, bandaid: 4, yoyo: 5,
+  fire_bottle: 6, bladed_yoyo: 7, glass_shiv: 8, smoke_patch: 9, adrenal_patch: 10, fizz_bomb: 11,
+};
 
 export type HudShoveIndicator = {
   base: Phaser.GameObjects.Graphics;
@@ -13,97 +19,113 @@ export type HudShoveIndicator = {
   radius: number;
 };
 
-export type CraftPill = {
-  root: Phaser.GameObjects.Container;
-  show: (v: boolean) => void;
-};
-
 export type HudElements = {
   container: Phaser.GameObjects.Container;
   heartPlate: Phaser.GameObjects.Graphics;
   hearts: Phaser.GameObjects.Graphics;
-  slotTexts: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];    // now only the tiny “1” / “2” hints
-  slotIcons: [Phaser.GameObjects.Image, Phaser.GameObjects.Image];
-  slotUseDots: [Phaser.GameObjects.Graphics, Phaser.GameObjects.Graphics];
-  craftPill: CraftPill;
+
+  slotPills: [
+    { root: Phaser.GameObjects.Container; icon: Phaser.GameObjects.Image; name: Phaser.GameObjects.Text; pips: Phaser.GameObjects.Graphics; w:number; h:number; },
+    { root: Phaser.GameObjects.Container; icon: Phaser.GameObjects.Image; name: Phaser.GameObjects.Text; pips: Phaser.GameObjects.Graphics; w:number; h:number; }
+  ];
+
+  craftPreview: {
+    root: Phaser.GameObjects.Container;
+    icon: Phaser.GameObjects.Image;
+    name: Phaser.GameObjects.Text;
+    show: (v: boolean) => void;
+    w:number; h:number;
+  };
+
   shoveIndicator: HudShoveIndicator;
-  controlsOverlay: { show: () => void; hide: () => void };
 };
 
 export type HudUpdateOptions = {
   shoveCooldown?: { remainingMs: number; durationMs: number };
-  canCraft?: boolean;                    // <— NEW: pass true when slot A+B is a valid recipe
 };
 
-const PLATE_BG = 0x13171f;
-const PLATE_STROKE = 0x2a3242;
+const PLATE_BG  = 0x13171f;
+const PLATE_STK = 0x2a3242;
+const TEXT_MAIN = '#e6e6e6';
+const TEXT_DIM  = '#9aa3b2';
+
+function setIcon(image: Phaser.GameObjects.Image, item: Item | null) {
+  if (!item) { image.setVisible(false); return; }
+
+  // Prefer the 'items' atlas/spritesheet frame if present
+  const hasItemsSheet = image.scene.textures.exists('items');
+  const frame = ITEM_FRAME[item.id as keyof typeof ITEM_FRAME];
+
+  if (hasItemsSheet && frame !== undefined) {
+    image.setTexture('items', frame).setVisible(true);
+  } else if (item.icon && image.scene.textures.exists(item.icon)) {
+    image.setTexture(item.icon).setVisible(true);
+  } else {
+    // Unknown texture key → hide to avoid black box
+    image.setVisible(false);
+  }
+}
 
 export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
-  const container = scene.add.container(0, 0);
-  container.setDepth(1000).setScrollFactor(0);
+  const container = scene.add.container(0,0).setDepth(1000).setScrollFactor(0);
 
-  // ── Heart plate (top-left, minimal)
+  // Hearts plate (top-left)
   const heartPlate = scene.add.graphics();
-  heartPlate
-    .fillStyle(PLATE_BG, 0.7)
-    .fillRoundedRect(12, 12, 160, 28, 8)
-    .lineStyle(1, PLATE_STROKE, 1)
-    .strokeRoundedRect(12, 12, 160, 28, 8);
+  heartPlate.fillStyle(PLATE_BG, 0.7).fillRoundedRect(12, 12, 160, 28, 8)
+            .lineStyle(1, PLATE_STK, 1).strokeRoundedRect(12, 12, 160, 28, 8);
   container.add(heartPlate);
 
   const hearts = scene.add.graphics().setScrollFactor(0);
   container.add(hearts);
 
-  // ── Slot chips (bottom-left): icon + tiny “1/2” + pips
-  const makeChip = (x: number, keyHint: string) => {
-    const plate = scene.add.graphics();
-    plate
-      .fillStyle(PLATE_BG, 0.7)
-      .fillRoundedRect(x, scene.scale.height - 44, 72, 24, 8)
-      .lineStyle(1, PLATE_STROKE, 1)
-      .strokeRoundedRect(x, scene.scale.height - 44, 72, 24, 8);
-    container.add(plate);
+  // Small item pills just under hearts
+  const makePill = (x:number, y:number) => {
+    const w = 150, h = 22;
+    const root = scene.add.container(x, y).setScrollFactor(0);
 
-    const hint = scene.add.text(x + 6, scene.scale.height - 42, keyHint, {
-      fontFamily: 'monospace',
-      fontSize: '12px',
-      color: '#b7c0d1',
-    }).setScrollFactor(0);
-    container.add(hint);
+    const bg = scene.add.graphics();
+    bg.fillStyle(PLATE_BG, 0.7).fillRoundedRect(0, 0, w, h, 7)
+      .lineStyle(1, PLATE_STK, 1).strokeRoundedRect(0, 0, w, h, 7);
 
-    const icon = scene.add.image(x + 30, scene.scale.height - 32, ITEM_TEXTURE_KEYS.match)
-      .setDisplaySize(20, 20).setVisible(false).setScrollFactor(0);
-    container.add(icon);
+    const icon = scene.add.image(10 + 8, h/2, '').setDisplaySize(2.5,2.5).setVisible(false);
+    const name = scene.add.text(10 + 8 + 12, h/2, '', {
+      fontFamily: 'monospace', fontSize: '11px', color: TEXT_MAIN, wordWrap: { width: w - 60 },
+    }).setOrigin(0, 0.5);
+    const pips = scene.add.graphics();
 
-    const uses = scene.add.graphics().setScrollFactor(0);
-    container.add(uses);
-
-    return { hint, icon, uses };
+    root.add([bg, icon, name, pips]);
+    container.add(root);
+    return { root, icon, name, pips, w, h };
   };
 
-  const chip1 = makeChip(16, '1');
-  const chip2 = makeChip(96, '2');
+  // Position: directly below HP bar, stacked
+  const pillX = 12;
+  const pill1 = makePill(pillX, 12 + 28 + 6);     // HP plate bottom + gap
+  const pill2 = makePill(pillX, 12 + 28 + 6 + 24);
 
-  const slotIcons: HudElements['slotIcons'] = [chip1.icon, chip2.icon];
-  const slotTexts: HudElements['slotTexts'] = [chip1.hint, chip2.hint];
-  const slotUseDots: HudElements['slotUseDots'] = [chip1.uses, chip2.uses];
+  // Craft preview (top-center) — compact
+  const cpW = 220, cpH = 24;
+  const cpRoot = scene.add.container(scene.scale.width/2, 10).setScrollFactor(0).setDepth(1001).setVisible(false);
+  const cpBg = scene.add.graphics();
+  cpBg.fillStyle(0xf6c353, 0.95).fillRoundedRect(-cpW/2, 0, cpW, cpH, 8)
+      .lineStyle(1, 0xe8833a, 1).strokeRoundedRect(-cpW/2, 0, cpW, cpH, 8);
+  const cpIcon = scene.add.image(-cpW/2 + 10 + 8, cpH/2, '').setDisplaySize(2.5,2.5).setVisible(false);
+  const cpName = scene.add.text(-cpW/2 + 10 + 8 + 12, cpH/2, '', {
+    fontFamily: 'monospace', fontSize: '11px', color: '#2d1c0a',
+  }).setOrigin(0, 0.5);
+  cpRoot.add([cpBg, cpIcon, cpName]);
+  container.add(cpRoot);
+  scene.tweens.add({ targets: cpBg, alpha: { from: 0.85, to: 1 }, yoyo: true, duration: 1100, repeat: -1 });
 
-  // ── Contextual Craft pill (center-bottom; appears only when canCraft===true)
-  const craftPillRoot = scene.add.container(scene.scale.width / 2, scene.scale.height - 40).setVisible(false);
-  const craftBg = scene.add.rectangle(0, 0, 140, 26, 0xf6c353, 0.95).setOrigin(0.5);
-  craftBg.setStrokeStyle(1, 0xe8833a, 1).setScrollFactor(0).setInteractive({ useHandCursor: true });
-  const craftTxt = scene.add.text(0, 0, 'Craft  (R)', {
-    fontFamily: 'monospace', fontSize: '12px', color: '#2d1c0a',
-  }).setOrigin(0.5).setScrollFactor(0);
-  craftPillRoot.add([craftBg, craftTxt]);
-  container.add(craftPillRoot);
-  scene.tweens.add({ targets: craftBg, alpha: { from: 0.85, to: 1 }, yoyo: true, duration: 1200, repeat: -1 });
-  craftBg.on('pointerdown', () => scene.input.keyboard?.emit('keydown-R'));
-  const craftPill: CraftPill = { root: craftPillRoot, show: (v) => craftPillRoot.setVisible(v) };
+  const craftPreview = {
+    root: cpRoot, icon: cpIcon, name: cpName,
+    show(v:boolean){ cpRoot.setVisible(v); },
+    w: cpW, h: cpH,
+  };
 
-  // ── Shove ring (keep your original, just anchor to the new overlay)
+  // Shove ring (top-right)
   const shoveRadius = 12;
-  const shoveCenter = { x: ROOM_W - 28, y: 36 }; // tucked top-right near edge
+  const shoveCenter = { x: ROOM_W - 28, y: 36 };
   const shoveBase = scene.add.graphics().setScrollFactor(0);
   const shoveProgress = scene.add.graphics().setScrollFactor(0);
   const shoveLabel = scene.add.text(shoveCenter.x, shoveCenter.y, 'F', {
@@ -116,62 +138,45 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
     center: shoveCenter, radius: shoveRadius,
   };
 
-  // ── Controls overlay (hold Tab to view)
-  const controlsOverlay = createControlsOverlay(scene);
-
-  // initialize with empty inventory
+  // Initial draw
   const initialInv: Inventory = [null, null];
   drawHUD(
-    { container, heartPlate, hearts, slotTexts, slotIcons, slotUseDots, craftPill, shoveIndicator, controlsOverlay },
-    maxHp, maxHp, initialInv,
+    { container, heartPlate, hearts, slotPills: [pill1 as any, pill2 as any], craftPreview, shoveIndicator },
+    maxHp, maxHp, initialInv
   );
 
-  // one-time hint
-  const hint = scene.add.text(scene.scale.width - 12, scene.scale.height - 18, 'Press Tab for controls', {
-    fontFamily: 'monospace', fontSize: '12px', color: '#b7c0d1',
-  }).setOrigin(1, 1).setDepth(1001).setScrollFactor(0);
-  scene.time.delayedCall(2000, () => hint.destroy());
-
-  // Tab behavior
-  scene.input.keyboard?.on('keydown-TAB', (e: KeyboardEvent) => { e.preventDefault(); controlsOverlay.show(); });
-  scene.input.keyboard?.on('keyup-TAB',   (e: KeyboardEvent) => { e.preventDefault(); controlsOverlay.hide(); });
-
-  return { container, heartPlate, hearts, slotTexts, slotIcons, slotUseDots, craftPill, shoveIndicator, controlsOverlay };
+  return { container, heartPlate, hearts, slotPills: [pill1 as any, pill2 as any], craftPreview, shoveIndicator };
 }
 
-function createControlsOverlay(scene: Phaser.Scene) {
-  const root = scene.add.container(0,0).setDepth(2000).setScrollFactor(0).setVisible(false);
-  const bg = scene.add.rectangle(0,0, scene.scale.width, scene.scale.height, 0x0b0d12, 0.75).setOrigin(0);
-  const panel = scene.add.graphics().fillStyle(PLATE_BG, 0.9).fillRoundedRect(0,0, 300, 200, 10)
-    .lineStyle(1, PLATE_STROKE, 1).strokeRoundedRect(0,0, 300, 200, 10);
-  const cx = scene.scale.width/2, cy = scene.scale.height/2;
-  panel.setPosition(cx-150, cy-100);
+function setPill(
+  pill: { icon: Phaser.GameObjects.Image; name: Phaser.GameObjects.Text; pips: Phaser.GameObjects.Graphics; w:number; h:number },
+  item: Item | null
+) {
+  pill.pips.clear();
+  if (!item) {
+    pill.icon.setVisible(false);
+    pill.name.setText('').setColor(TEXT_DIM);
+    return;
+  }
 
-  const lines = [
-    'Controls',
-    'WASD: Move',
-    'Mouse: Aim',
-    'Left Click: Use Slot 1',
-    'Right Click: Use Slot 2',
-    'E: Pick Up / Search',
-    'G: Drop Item',
-    'R: Craft',
-    'F: Shove',
-  ];
-  const text = scene.add.text(cx-150+16, cy-100+12, lines.join('\n'), {
-    fontFamily:'monospace', fontSize:'12px', color:'#e6e6e6', lineSpacing: 4
-  });
+  // icon + name
+  setIcon(pill.icon, item);
+  pill.name.setText(item.label).setColor(TEXT_MAIN);
 
-  root.add([bg, panel, text]);
-  return {
-    show(){ root.setVisible(true); },
-    hide(){ root.setVisible(false); },
-  };
-}
-
-function slotLabel(i: number, it: Item | null) {
-  if (!it) return `${i + 1}`;
-  return `${i + 1}`;
+  // uses pips (max 5 visible)
+  const totalUses = (item.data as { initialUses?: number } | undefined)?.initialUses ?? item.uses;
+  if (totalUses > 0) {
+    const shown = Math.min(totalUses, 5);
+    const spacing = 5;
+    const r = 1.6;
+    const startX = pill.w - (shown * spacing) - 10;
+    const y = pill.h / 2;
+    for (let i=0; i<shown; i++){
+      const filled = i < Math.min(item.uses, 5);
+      pill.pips.fillStyle(filled ? 0xe6e6e6 : 0x555555, 1);
+      pill.pips.fillCircle(startX + i*spacing, y, r);
+    }
+  }
 }
 
 export function drawHUD(
@@ -181,51 +186,41 @@ export function drawHUD(
   inv: Inventory,
   options: HudUpdateOptions = {},
 ) {
-  const { hearts, slotTexts, slotIcons, slotUseDots, shoveIndicator, craftPill } = hud;
+  const { hearts, slotPills, craftPreview, shoveIndicator } = hud;
 
-  // hearts
+  // Hearts
   hearts.clear();
-  for (let i = 0; i < maxHp; i += 1) {
+  for (let i = 0; i < maxHp; i++) {
     const color = i < hp ? 0xff4d4d : 0x3c414e;
     hearts.fillStyle(color, 1).fillCircle(28 + i * 24, 26, 7);
   }
 
-  // slots as chips: tiny label “1/2”, icon, and pips
-  for (let i = 0; i < slotTexts.length; i += 1) {
-    slotTexts[i].setText(slotLabel(i, inv[i]));
-    slotUseDots[i].clear().setVisible(false);
+  // Inventory pills
+  setPill(slotPills[0], inv[0]);
+  setPill(slotPills[1], inv[1]);
 
-    const item = inv[i];
-    if (item) {
-      slotIcons[i].setTexture(item.icon).setDisplaySize(20, 20).setVisible(true);
-
-      const totalUses = (item.data as { initialUses?: number } | undefined)?.initialUses ?? item.uses;
-      if (totalUses > 0) {
-        const spacing = 5;
-        const radius = 1.8;
-        const baseX = slotIcons[i].x + 18 - (Math.min(totalUses, 5) * spacing);
-        const y = slotIcons[i].y;
-        slotUseDots[i].fillStyle(0xe6e6e6, 1);
-        for (let dot = 0; dot < Math.min(totalUses, 5); dot += 1) {
-          const filled = dot < Math.min(item.uses, 5);
-          slotUseDots[i].fillStyle(filled ? 0xe6e6e6 : 0x555555, 1);
-          slotUseDots[i].fillCircle(baseX + dot * spacing, y, radius);
-        }
-        slotUseDots[i].setVisible(true);
+  // Craft preview pill (top-center) — only if recipe exists
+  let showCraft = false;
+  if (inv[0]?.id && inv[1]?.id) {
+    const outId = craft(inv[0].id, inv[1].id);
+    if (outId) {
+      const def = BASE_ITEMS[outId];
+      if (def) {
+        // icon from items sheet if available, else fallback texture key
+        const fakeItem = { id: def.id, icon: (def as any).icon ?? def.id } as Item;
+        setIcon(craftPreview.icon, fakeItem);
+        craftPreview.name.setText(def.label ? `Craft: ${def.label}` : 'Craft');
+        showCraft = true;
       }
-    } else {
-      slotIcons[i].setVisible(false);
     }
   }
+  craftPreview.show(showCraft);
 
-  // craft pill visibility
-  craftPill.show(!!options.canCraft);
-
-  // shove ring (unchanged, just stylistically tweaked)
-  const cooldown = options.shoveCooldown;
-  const remaining = Math.max(cooldown?.remainingMs ?? 0, 0);
-  const duration = Math.max(cooldown?.durationMs ?? 1, 1);
-  const fraction = Math.min(Math.max(remaining / duration, 0), 1);
+  // Shove cooldown
+  const cd = options.shoveCooldown;
+  const remaining = Math.max(cd?.remainingMs ?? 0, 0);
+  const duration  = Math.max(cd?.durationMs ?? 1, 1);
+  const fraction  = Math.min(Math.max(remaining / duration, 0), 1);
   const ready = fraction <= 0;
 
   shoveIndicator.base.clear();
@@ -240,21 +235,16 @@ export function drawHUD(
   shoveIndicator.progress.clear();
   if (!ready) {
     const startAngle = -Math.PI / 2;
-    const endAngle = startAngle + Math.PI * 2 * fraction;
+    const endAngle   = startAngle + Math.PI * 2 * fraction;
     shoveIndicator.progress.fillStyle(0xfff275, 0.85);
     shoveIndicator.progress.beginPath();
     shoveIndicator.progress.moveTo(shoveIndicator.center.x, shoveIndicator.center.y);
     shoveIndicator.progress.arc(
-      shoveIndicator.center.x,
-      shoveIndicator.center.y,
-      shoveIndicator.radius - 2,
-      startAngle,
-      endAngle,
-      false,
+      shoveIndicator.center.x, shoveIndicator.center.y, shoveIndicator.radius - 2,
+      startAngle, endAngle, false
     );
     shoveIndicator.progress.closePath();
     shoveIndicator.progress.fillPath();
   }
-
   shoveIndicator.label.setColor(ready ? '#ffffff' : '#cccccc').setAlpha(ready ? 1 : 0.85);
 }
