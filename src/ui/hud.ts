@@ -1,15 +1,8 @@
 import type Phaser from 'phaser';
 import { ROOM_W } from '@game/config';
-import type { Inventory, Item } from '@game/types';
-import { BASE_ITEMS } from '@game/items';
+import type { Inventory } from '@game/types';
+import { ITEMS, cloneItem, type Item } from '@game/items';
 import { craft } from '@game/recipes';
-
-// If you have a unified items spritesheet, map item ids -> frame index here.
-// Otherwise leave empty and we'll fall back to per-item textures.
-const ITEM_FRAME: Partial<Record<Item['id'], number>> = {
-  match: 0, knife: 1, soda: 2, bottle: 3, bandaid: 4, yoyo: 5,
-  fire_bottle: 6, bladed_yoyo: 7, glass_shiv: 8, smoke_patch: 9, adrenal_patch: 10, fizz_bomb: 11,
-};
 
 export type HudShoveIndicator = {
   base: Phaser.GameObjects.Graphics;
@@ -52,14 +45,9 @@ const TEXT_DIM  = '#9aa3b2';
 function setIcon(image: Phaser.GameObjects.Image, item: Item | null) {
   if (!item) { image.setVisible(false); return; }
 
-  // Prefer the 'items' atlas/spritesheet frame if present
-  const hasItemsSheet = image.scene.textures.exists('items');
-  const frame = ITEM_FRAME[item.id as keyof typeof ITEM_FRAME];
-
-  if (hasItemsSheet && frame !== undefined) {
-    image.setTexture('items', frame).setVisible(true);
-  } else if (item.icon && image.scene.textures.exists(item.icon)) {
-    image.setTexture(item.icon).setVisible(true);
+  const { icon } = item;
+  if (icon && image.scene.textures.exists(icon.key)) {
+    image.setTexture(icon.key, icon.frame).setVisible(true);
   } else {
     // Unknown texture key → hide to avoid black box
     image.setVisible(false);
@@ -204,10 +192,9 @@ export function drawHUD(
   if (inv[0]?.id && inv[1]?.id) {
     const outId = craft(inv[0].id, inv[1].id);
     if (outId) {
-      const def = BASE_ITEMS[outId];
+      const def = ITEMS[outId];
       if (def) {
-        // icon from items sheet if available, else fallback texture key
-        const fakeItem = { id: def.id, icon: (def as any).icon ?? def.id } as Item;
+        const fakeItem = cloneItem(outId);
         setIcon(craftPreview.icon, fakeItem);
         craftPreview.name.setText(def.label ? `Craft: ${def.label}` : 'Craft');
         showCraft = true;

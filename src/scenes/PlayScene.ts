@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { ROOM_W, ROOM_H, PLAYER_BASE } from '@game/config';
-import type { Item } from '@game/types';
-import { ITEM_TEXTURE_PATHS } from '@game/items';
+import { ITEM_ICON_SOURCES, type Item } from '@game/items';
 import { Monster, type TelegraphImpact, type MonsterHitbox } from '@game/monster';
 import { createHUD, drawHUD, type HudElements } from '@ui/hud';
 import { createEndCard, type EndCardElements } from '@ui/endCard';
@@ -66,8 +65,15 @@ export class PlayScene extends Phaser.Scene {
 
     this.load.atlas('furniture', 'assets/sprites/furniture.png', 'assets/sprites/furniture.json');
 
-    Object.entries(ITEM_TEXTURE_PATHS).forEach(([key, path]) => {
-      this.load.image(key, path);
+    Object.entries(ITEM_ICON_SOURCES).forEach(([key, source]) => {
+      if (source.type === 'sheet') {
+        this.load.spritesheet(key, source.path, {
+          frameWidth: source.frameWidth,
+          frameHeight: source.frameHeight,
+        });
+      } else {
+        this.load.image(key, source.path);
+      }
     });
 
   }

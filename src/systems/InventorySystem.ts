@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
-import type { Inventory, Item } from '@game/types';
-import { cloneItem } from '@game/items';
+import type { Inventory } from '@game/types';
+import { cloneItem, type Item } from '@game/items';
 import { craft as craftRecipe } from '@game/recipes';
 
 export interface GroundItem extends Phaser.GameObjects.Image {
@@ -43,7 +43,7 @@ export class InventorySystem {
       const dropped = this.inventory[0]!;
       this.inventory[0] = { ...cloneItem(id) };
       overItem.itemId = dropped.id;
-      overItem.setTexture(dropped.icon);
+      overItem.setTexture(dropped.icon.key, dropped.icon.frame);
       overItem.label.setText(dropped.label);
     } else {
       this.inventory[swapIndex] = { ...cloneItem(id) };
@@ -104,7 +104,7 @@ export class InventorySystem {
 
   createGroundItem(x: number, y: number, id: Item['id']) {
     const template = cloneItem(id);
-    const sprite = this.scene.add.image(x, y, template.icon) as GroundItem;
+    const sprite = this.scene.add.image(x, y, template.icon.key, template.icon.frame) as GroundItem;
     sprite.setDisplaySize(28, 28);
     sprite.setDepth(6);
     sprite.itemId = template.id;

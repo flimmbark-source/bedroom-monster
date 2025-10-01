@@ -1,4 +1,4 @@
-import type { ItemId } from './types';
+import type { ItemId } from './items';
 
 export type Recipe = { a: ItemId; b: ItemId; out: ItemId };
 

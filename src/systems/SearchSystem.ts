@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-import type { Item } from '@game/types';
+import type { Item } from '@game/items';
 
 import { InventorySystem } from './InventorySystem';
 
