@@ -173,6 +173,7 @@ const ROOM_KEY_DROPS: Record<RoomId, Weighted<KeyId>[]> = {
 
 const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
   {
+
     x: 360,
     y: 260,
     options: {
