@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 
-import { ROOMS, type RoomConfig, type RoomSpawns } from '@content/rooms';
+import { ROOMS, cloneWeightedPool, type RoomConfig, type RoomSpawns } from '@content/rooms';
 import type { ItemId } from '@game/items';
 import { DoorSystem } from '@game/doors';
 import type { Weighted } from '@content/rooms';
-import type { RoomId } from '@game/world';
+import type { KeyId, RoomId } from '@game/world';
 
 import { InventorySystem } from '../systems/InventorySystem';
 import { SearchSystem } from '../systems/SearchSystem';
@@ -15,7 +15,7 @@ export type LoadedRoom = {
   starterItems: ItemId[];
   restockPoints: { x: number; y: number }[];
   spawns: RoomSpawns;
-  keyDrops: Weighted<ItemId>[];
+  keysHere: Weighted<KeyId>[];
 };
 
 export class RoomLoader {
@@ -79,14 +79,14 @@ export class RoomLoader {
     return {
       id: config.id,
       size: { ...config.size },
-      starterItems: [...config.starterItems],
-      restockPoints: config.restockPoints.map((point) => ({ ...point })),
+      starterItems: [...config.itemPool.starters],
+      restockPoints: config.spawns.restockPoints.map((point) => ({ ...point })),
       spawns: {
         restock: { ...config.spawns.restock },
-        items: config.spawns.items.map((entry) => ({ ...entry })),
-        monsters: config.spawns.monsters.map((entry) => ({ ...entry })),
+        items: cloneWeightedPool(config.itemPool.restock),
+        monsters: cloneWeightedPool(config.monsters),
       },
-      keyDrops: config.keyDrops.map((entry) => ({ ...entry })),
+      keysHere: cloneWeightedPool(config.keysHere),
     };
   }
 
@@ -96,13 +96,13 @@ export class RoomLoader {
     const centerY = height / 2;
     if (!this.background) {
       this.background = this.scene.add
-        .image(centerX, centerY, config.background.key)
+        .image(centerX, centerY, config.backgroundKey)
         .setDepth(-20)
         .setScrollFactor(0);
     }
 
     this.background
-      .setTexture(config.background.key)
+      .setTexture(config.backgroundKey)
       .setDisplaySize(width, height)
       .setPosition(centerX, centerY);
   }

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MONSTER_SPRITES, type MonsterSpriteDefinition } from '@content/monsterSprites';
 import { MONSTERS, type MonsterDefinition, type MonsterId, type Move, type MoveId } from '@content/monsters';
 const TELEGRAPH_COLORS = {
   preWarn: 0xffe066,
@@ -81,6 +82,7 @@ export type TelegraphHitCandidate = {
 
 export class Monster extends Phaser.Physics.Arcade.Sprite {
   private monsterId: MonsterId = 'brine_walker';
+  private spriteConfig: MonsterSpriteDefinition = MONSTER_SPRITES.brine_walker;
   private moveDefinitions: Record<MoveId, Move> = MONSTERS.brine_walker.moves;
   private moveOrder: MoveId[] = [...MONSTERS.brine_walker.moveOrder];
   private moveCooldowns: Record<MoveId, number> = { sweep: 0, smash: 0, rush: 0, roar: 0 };
@@ -136,7 +138,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   private movementAnimKey(moving: boolean) {
-    return `monster-${moving ? 'walk' : 'idle'}-${this.facing}` as const;
+    const prefix = this.spriteConfig.animations.keyPrefix;
+    return `${prefix}-${moving ? 'walk' : 'idle'}-${this.facing}` as const;
   }
 
   private configureBodyFromScale() {
@@ -146,13 +149,13 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     }
     const monsterScaleX = Math.abs(this.scaleX) || 1;
     const monsterScaleY = Math.abs(this.scaleY) || 1;
-    const MONSTER_FRAME_WIDTH = 184;
-    const MONSTER_FRAME_HEIGHT = 275;
-    const MONSTER_VISIBLE_TOP = 38;
-    const MONSTER_VISIBLE_BOTTOM = 22;
-    const MONSTER_VISIBLE_HEIGHT = MONSTER_FRAME_HEIGHT - MONSTER_VISIBLE_TOP - MONSTER_VISIBLE_BOTTOM;
-    body.setSize(MONSTER_FRAME_WIDTH / monsterScaleX, MONSTER_VISIBLE_HEIGHT / monsterScaleY);
-    body.setOffset(0, MONSTER_VISIBLE_TOP / monsterScaleY);
+    const frameWidth = this.spriteConfig.frame.width;
+    const frameHeight = this.spriteConfig.frame.height;
+    const visibleTop = this.spriteConfig.collision.visibleTop;
+    const visibleBottom = this.spriteConfig.collision.visibleBottom;
+    const visibleHeight = frameHeight - visibleTop - visibleBottom;
+    body.setSize(frameWidth / monsterScaleX, visibleHeight / monsterScaleY);
+    body.setOffset(0, visibleTop / monsterScaleY);
   }
 
   private setFacingFromVector(dx: number, dy: number) {
@@ -965,8 +968,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
 
   constructor(scene: Phaser.Scene, x: number, y: number, monsterId: MonsterId = 'brine_walker') {
-    super(scene, x, y, 'monster', 0);
+    const spriteConfig = MONSTER_SPRITES[monsterId] ?? MONSTER_SPRITES.brine_walker;
+    super(scene, x, y, spriteConfig.textureKey, 0);
     this.monsterId = monsterId;
+    this.spriteConfig = spriteConfig;
     const config: MonsterDefinition = MONSTERS[monsterId] ?? MONSTERS.brine_walker;
     this.hpMax = config.stats.hp;
     this.hp = this.hpMax;
