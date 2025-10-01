@@ -7,8 +7,8 @@ export type HurtSpec = {
 
 export const HURTBOX_SPECS: Record<string, HurtSpec> = {
   brine_walker: {
-    core: { halfLen: 96, radius: 58, footOffsetY: 14 },
-    head: { offset: 110, radius: 42 },
+    core: { halfLen: 68, radius: 38, footOffsetY: 14 },
+    head: { offset: 76, radius: 28 },
     tail: { offset: 42, radius: 30 },
     dashShrink: 0.85,
   },

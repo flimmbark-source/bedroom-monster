@@ -3,6 +3,13 @@ import { MONSTER_SPRITES, type MonsterSpriteDefinition } from '@content/monsterS
 import { MONSTERS, type MonsterDefinition, type MonsterId, type Move, type MoveId } from '@content/monsters';
 import { MonsterHurtbox, type MonsterPose, type MonsterStateTag, type HurtboxShapeInstance } from '../combat/monsterHurtbox';
 import { getShapeBounds } from '../combat/shapes';
+
+const ENABLE_HURTBOX_DEBUG = import.meta.env.DEV;
+const HURTBOX_DEBUG_COLORS: Record<HurtboxShapeInstance['part'], number> = {
+  core: 0x12c0ff,
+  head: 0xff7a1a,
+  tail: 0x7c5bff,
+};
 const TELEGRAPH_COLORS = {
   preWarn: 0xffe066,
   windUp: 0xffa149,
@@ -118,6 +125,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private hurtbox: MonsterHurtbox;
   private hurtState: MonsterStateTag = 'idle';
   private lastPose: MonsterPose;
+  private hurtboxDebugGraphics?: Phaser.GameObjects.Graphics;
+  private cachedHurtboxShapes: HurtboxShapeInstance[] = [];
   private hitboxDefs: MonsterHitboxDefinition[] = [
     { id: 'core', part: 'core', damageMultiplier: 1 },
     { id: 'head', part: 'head', damageMultiplier: 1.15 },
@@ -202,6 +211,39 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     const pose = this.buildPose(stateOverride);
     this.lastPose = pose;
     this.hurtbox.update(pose);
+    this.cachedHurtboxShapes = this.hurtbox.shapes(pose);
+    this.renderHurtboxDebug(this.cachedHurtboxShapes);
+  }
+
+  private renderHurtboxDebug(shapes: HurtboxShapeInstance[]) {
+    if (!this.hurtboxDebugGraphics) {
+      return;
+    }
+    const graphics = this.hurtboxDebugGraphics;
+    graphics.clear();
+    graphics.setDepth(this.depth + 6);
+
+    shapes.forEach(({ part, shape }) => {
+      const color = HURTBOX_DEBUG_COLORS[part];
+      if (shape.kind === 'circle') {
+        graphics.fillStyle(color, 0.15);
+        graphics.fillCircle(shape.x, shape.y, shape.r);
+        graphics.lineStyle(2, color, 0.9);
+        graphics.strokeCircle(shape.x, shape.y, shape.r);
+        return;
+      }
+
+      const length = Phaser.Math.Distance.Between(shape.ax, shape.ay, shape.bx, shape.by);
+      const angle = Phaser.Math.Angle.Between(shape.ax, shape.ay, shape.bx, shape.by);
+      graphics.save();
+      graphics.translateCanvas(shape.ax, shape.ay);
+      graphics.rotateCanvas(angle);
+      graphics.fillStyle(color, 0.15);
+      graphics.fillRoundedRect(0, -shape.r, length, shape.r * 2, shape.r);
+      graphics.lineStyle(2, color, 0.9);
+      graphics.strokeRoundedRect(0, -shape.r, length, shape.r * 2, shape.r);
+      graphics.restore();
+    });
   }
 
   private setHurtState(state: MonsterStateTag) {
@@ -364,7 +406,9 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   getHitboxes(): MonsterHitbox[] {
     const pose = this.lastPose ?? this.buildPose();
-    const shapes = this.hurtbox.shapes(pose);
+    const shapes = this.cachedHurtboxShapes.length
+      ? this.cachedHurtboxShapes
+      : this.hurtbox.shapes(pose);
     return shapes.map(({ part, shape }) => {
       const def = this.hitboxDefs.find((candidate) => candidate.part === part);
       const damageMultiplier = def?.damageMultiplier ?? 1;
@@ -1075,8 +1119,14 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       .setDepth(this.depth + 5);
     this.refreshHpBar();
 
+    if (ENABLE_HURTBOX_DEBUG) {
+      this.hurtboxDebugGraphics = scene.add.graphics({}).setDepth(this.depth + 6);
+    }
+
     this.lastPose = this.buildPose();
     this.hurtbox.update(this.lastPose);
+    this.cachedHurtboxShapes = this.hurtbox.shapes(this.lastPose);
+    this.renderHurtboxDebug(this.cachedHurtboxShapes);
 
     // Gentle idle breathing so the monster feels alive between actions.
     this.idleTween = scene.tweens.add({
@@ -1262,6 +1312,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.hpBarBg.destroy();
     this.hpBarRageZone.destroy();
     this.hpBarFill.destroy();
+    this.hurtboxDebugGraphics?.destroy();
     super.preDestroy();
   }
 
