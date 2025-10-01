@@ -80,23 +80,24 @@ export class TelegraphSystem {
 
   getMonsterHitboxesWithinArc(range: number, halfAngle: number) {
     const aim = this.getAimAngle();
-    const steps = Math.max(2, Math.ceil((halfAngle * 2) / Phaser.Math.DegToRad(12)));
-    const polygon = this.createSectorPolygon(this.player.x, this.player.y, range, aim, halfAngle, steps);
-    return this.getMonsterHitboxes().filter((hitbox) => this.rectIntersectsPolygon(hitbox.rect, polygon));
+    const originX = this.player.x;
+    const originY = this.player.y;
+    return this.getMonsterHitboxes().filter((hitbox) =>
+      this.shapeIntersectsSector(hitbox.shape, originX, originY, range, aim, halfAngle),
+    );
   }
 
   getMonsterHitboxesWithinStrip(range: number, halfAngle: number, halfThickness: number) {
     const aim = this.getAimAngle();
     const origin = new Phaser.Math.Vector2(this.player.x, this.player.y);
-    const polygon = this.createStripPolygon(origin, aim, range, halfThickness);
     return this.getMonsterHitboxes().filter((hitbox) => {
-      if (!this.rectIntersectsPolygon(hitbox.rect, polygon)) {
+      if (!this.shapeIntersectsOrientedRect(hitbox.shape, origin, aim, range, halfThickness)) {
         return false;
       }
       if (halfAngle <= 0) {
         return true;
       }
-      return this.rectWithinAngle(hitbox.rect, origin.x, origin.y, aim, halfAngle);
+      return this.shapeIntersectsSector(hitbox.shape, origin.x, origin.y, range, aim, halfAngle);
     });
   }
 
@@ -104,15 +105,16 @@ export class TelegraphSystem {
     const originX = this.player.x;
     const originY = this.player.y;
     return this.getMonsterHitboxes().filter((hitbox) =>
-      this.ringIntersectsRect(hitbox.rect, originX, originY, inner, outer),
+      this.shapeIntersectsRing(hitbox.shape, originX, originY, inner, outer),
     );
   }
 
   getMonsterHitboxesWithinLane(range: number, halfWidth: number) {
     const aim = this.getAimAngle();
     const origin = new Phaser.Math.Vector2(this.player.x, this.player.y);
-    const polygon = this.createStripPolygon(origin, aim, range, halfWidth);
-    return this.getMonsterHitboxes().filter((hitbox) => this.rectIntersectsPolygon(hitbox.rect, polygon));
+    return this.getMonsterHitboxes().filter((hitbox) =>
+      this.shapeIntersectsOrientedRect(hitbox.shape, origin, aim, range, halfWidth),
+    );
   }
 
   private spawnDamageNumber(x: number, y: number, damage: number, isDot: boolean) {
@@ -590,144 +592,216 @@ export class TelegraphSystem {
     }
   }
 
-  private createSectorPolygon(
+  private shapeIntersectsSector(
+    shape: MonsterHitbox['shape'],
     originX: number,
     originY: number,
-    radius: number,
-    angle: number,
-    halfAngle: number,
-    steps: number,
-  ) {
-    const points: number[] = [originX, originY];
-    for (let i = 0; i <= steps; i += 1) {
-      const t = -halfAngle + (i / steps) * (halfAngle * 2);
-      const theta = angle + t;
-      points.push(originX + Math.cos(theta) * radius, originY + Math.sin(theta) * radius);
-    }
-    return new Phaser.Geom.Polygon(points);
-  }
-
-  private createStripPolygon(
-    origin: Phaser.Math.Vector2,
-    angle: number,
     range: number,
-    halfThickness: number,
+    aim: number,
+    halfAngle: number,
   ) {
-    const forward = new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle));
-    const side = new Phaser.Math.Vector2(-forward.y, forward.x);
-    const start = origin.clone();
-    const end = origin.clone().add(forward.clone().scale(range));
-    const p1 = start.clone().add(side.clone().scale(halfThickness));
-    const p2 = end.clone().add(side.clone().scale(halfThickness));
-    const p3 = end.clone().add(side.clone().scale(-halfThickness));
-    const p4 = start.clone().add(side.clone().scale(-halfThickness));
-    return new Phaser.Geom.Polygon([p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, p4.x, p4.y]);
+    if (shape.kind === 'circle') {
+      return this.circleIntersectsSector(shape, originX, originY, range, aim, halfAngle);
+    }
+    return this.capsuleIntersectsSector(shape, originX, originY, range, aim, halfAngle);
   }
 
-  private rectIntersectsPolygon(rect: Phaser.Geom.Rectangle, polygon: Phaser.Geom.Polygon) {
-    const points = polygon.points;
-    for (let i = 0; i < points.length; i += 1) {
-      const point = points[i];
-      if (Phaser.Geom.Rectangle.Contains(rect, point.x, point.y)) {
+  private circleIntersectsSector(
+    circle: MonsterHitbox['shape'] & { kind: 'circle' },
+    originX: number,
+    originY: number,
+    range: number,
+    aim: number,
+    halfAngle: number,
+  ) {
+    const dx = circle.x - originX;
+    const dy = circle.y - originY;
+    const distSq = dx * dx + dy * dy;
+    const radius = circle.r;
+    if (distSq <= radius * radius) {
+      return true;
+    }
+    const rangeWithRadius = range + radius;
+    if (distSq > rangeWithRadius * rangeWithRadius) {
+      return false;
+    }
+    const angleToCenter = Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - aim);
+    if (Math.abs(angleToCenter) <= halfAngle) {
+      return true;
+    }
+    const boundaries = [aim - halfAngle, aim + halfAngle];
+    for (const boundary of boundaries) {
+      const ca = Math.cos(boundary);
+      const sa = Math.sin(boundary);
+      const t = dx * ca + dy * sa;
+      if (t < 0) {
+        continue;
+      }
+      const clampedT = Phaser.Math.Clamp(t, 0, range);
+      const closestX = originX + ca * clampedT;
+      const closestY = originY + sa * clampedT;
+      const ddx = circle.x - closestX;
+      const ddy = circle.y - closestY;
+      if (ddx * ddx + ddy * ddy <= radius * radius) {
         return true;
       }
     }
-
-    const corners = [
-      { x: rect.left, y: rect.top },
-      { x: rect.right, y: rect.top },
-      { x: rect.right, y: rect.bottom },
-      { x: rect.left, y: rect.bottom },
-    ];
-    for (let i = 0; i < corners.length; i += 1) {
-      const corner = corners[i];
-      if (Phaser.Geom.Polygon.Contains(polygon, corner.x, corner.y)) {
-        return true;
-      }
-    }
-
-    for (let i = 0; i < points.length; i += 1) {
-      const p1 = points[i];
-      const p2 = points[(i + 1) % points.length];
-      const edge = new Phaser.Geom.Line(p1.x, p1.y, p2.x, p2.y);
-      if (Phaser.Geom.Intersects.LineToRectangle(edge, rect)) {
-        return true;
-      }
-    }
-
     return false;
   }
 
-  private rectWithinAngle(
-    rect: Phaser.Geom.Rectangle,
+  private capsuleIntersectsSector(
+    capsule: MonsterHitbox['shape'] & { kind: 'capsule' },
     originX: number,
     originY: number,
-    angle: number,
+    range: number,
+    aim: number,
     halfAngle: number,
   ) {
-    const points = [
-      { x: rect.left, y: rect.top },
-      { x: rect.right, y: rect.top },
-      { x: rect.right, y: rect.bottom },
-      { x: rect.left, y: rect.bottom },
-      { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
-    ];
-    return points.some((point) => {
-      const theta = Phaser.Math.Angle.Between(originX, originY, point.x, point.y);
-      const diff = Math.abs(Phaser.Math.Angle.Wrap(theta - angle));
-      return diff <= halfAngle;
-    });
+    const length = Phaser.Math.Distance.Between(capsule.ax, capsule.ay, capsule.bx, capsule.by);
+    const samples = Math.max(3, Math.ceil(length / Math.max(1, capsule.r * 0.75)));
+    for (let i = 0; i <= samples; i += 1) {
+      const t = i / samples;
+      const x = Phaser.Math.Linear(capsule.ax, capsule.bx, t);
+      const y = Phaser.Math.Linear(capsule.ay, capsule.by, t);
+      if (this.circleIntersectsSector({ kind: 'circle', x, y, r: capsule.r }, originX, originY, range, aim, halfAngle)) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  private ringIntersectsRect(
-    rect: Phaser.Geom.Rectangle,
+  private shapeIntersectsOrientedRect(
+    shape: MonsterHitbox['shape'],
+    origin: Phaser.Math.Vector2,
+    angle: number,
+    range: number,
+    halfWidth: number,
+  ) {
+    if (shape.kind === 'circle') {
+      return this.circleIntersectsOrientedRect(shape, origin, angle, range, halfWidth);
+    }
+    return this.capsuleIntersectsOrientedRect(shape, origin, angle, range, halfWidth);
+  }
+
+  private circleIntersectsOrientedRect(
+    circle: MonsterHitbox['shape'] & { kind: 'circle' },
+    origin: Phaser.Math.Vector2,
+    angle: number,
+    range: number,
+    halfWidth: number,
+  ) {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const dx = circle.x - origin.x;
+    const dy = circle.y - origin.y;
+    const localX = dx * cos + dy * sin;
+    const localY = -dx * sin + dy * cos;
+    const closestX = Phaser.Math.Clamp(localX, 0, range);
+    const closestY = Phaser.Math.Clamp(localY, -halfWidth, halfWidth);
+    const ddx = localX - closestX;
+    const ddy = localY - closestY;
+    return ddx * ddx + ddy * ddy <= circle.r * circle.r;
+  }
+
+  private capsuleIntersectsOrientedRect(
+    capsule: MonsterHitbox['shape'] & { kind: 'capsule' },
+    origin: Phaser.Math.Vector2,
+    angle: number,
+    range: number,
+    halfWidth: number,
+  ) {
+    const length = Phaser.Math.Distance.Between(capsule.ax, capsule.ay, capsule.bx, capsule.by);
+    const samples = Math.max(3, Math.ceil(length / Math.max(1, capsule.r * 0.75)));
+    for (let i = 0; i <= samples; i += 1) {
+      const t = i / samples;
+      const x = Phaser.Math.Linear(capsule.ax, capsule.bx, t);
+      const y = Phaser.Math.Linear(capsule.ay, capsule.by, t);
+      if (this.circleIntersectsOrientedRect({ kind: 'circle', x, y, r: capsule.r }, origin, angle, range, halfWidth)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private shapeIntersectsRing(
+    shape: MonsterHitbox['shape'],
     originX: number,
     originY: number,
     inner: number,
     outer: number,
   ) {
-    const corners = [
-      { x: rect.left, y: rect.top },
-      { x: rect.right, y: rect.top },
-      { x: rect.right, y: rect.bottom },
-      { x: rect.left, y: rect.bottom },
-    ];
-
-    const insideOuter = corners.some((corner) =>
-      Phaser.Math.Distance.Between(corner.x, corner.y, originX, originY) <= outer,
-    );
-    if (insideOuter) {
-      const insideInner = corners.every((corner) =>
-        Phaser.Math.Distance.Between(corner.x, corner.y, originX, originY) <= inner,
-      );
-      if (insideInner) {
-        return false;
-      }
-      return true;
+    if (shape.kind === 'circle') {
+      return this.circleIntersectsRing(shape, originX, originY, inner, outer);
     }
+    return this.capsuleIntersectsRing(shape, originX, originY, inner, outer);
+  }
 
-    const clampedX = Phaser.Math.Clamp(originX, rect.left, rect.right);
-    const clampedY = Phaser.Math.Clamp(originY, rect.top, rect.bottom);
-    const dx = originX - clampedX;
-    const dy = originY - clampedY;
-    const distSq = dx * dx + dy * dy;
-    if (distSq > outer * outer) {
+  private circleIntersectsRing(
+    circle: MonsterHitbox['shape'] & { kind: 'circle' },
+    originX: number,
+    originY: number,
+    inner: number,
+    outer: number,
+  ) {
+    const dist = Phaser.Math.Distance.Between(circle.x, circle.y, originX, originY);
+    if (dist - circle.r > outer) {
       return false;
     }
-
-    if (Phaser.Geom.Rectangle.Contains(rect, originX, originY)) {
-      return outer > inner;
+    if (dist + circle.r < inner) {
+      return false;
     }
-
-    if (distSq < inner * inner) {
-      const furthestCornerSq = corners.reduce((max, corner) => {
-        const ddx = originX - corner.x;
-        const ddy = originY - corner.y;
-        return Math.max(max, ddx * ddx + ddy * ddy);
-      }, 0);
-      return furthestCornerSq >= inner * inner;
-    }
-
     return true;
+  }
+
+  private capsuleIntersectsRing(
+    capsule: MonsterHitbox['shape'] & { kind: 'capsule' },
+    originX: number,
+    originY: number,
+    inner: number,
+    outer: number,
+  ) {
+    const minSegDistSq = this.distanceSegmentToPointSq(
+      capsule.ax,
+      capsule.ay,
+      capsule.bx,
+      capsule.by,
+      originX,
+      originY,
+    );
+    const minDist = Math.max(0, Math.sqrt(minSegDistSq) - capsule.r);
+    const distA = Phaser.Math.Distance.Between(capsule.ax, capsule.ay, originX, originY);
+    const distB = Phaser.Math.Distance.Between(capsule.bx, capsule.by, originX, originY);
+    const maxDist = Math.max(distA, distB) + capsule.r;
+    if (minDist > outer) {
+      return false;
+    }
+    if (maxDist < inner) {
+      return false;
+    }
+    return true;
+  }
+
+  private distanceSegmentToPointSq(
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+    px: number,
+    py: number,
+  ) {
+    const vx = bx - ax;
+    const vy = by - ay;
+    const wx = px - ax;
+    const wy = py - ay;
+    const lenSq = vx * vx + vy * vy;
+    let t = 0;
+    if (lenSq > 0) {
+      t = Phaser.Math.Clamp((wx * vx + wy * vy) / lenSq, 0, 1);
+    }
+    const cx = ax + vx * t;
+    const cy = ay + vy * t;
+    const dx = px - cx;
+    const dy = py - cy;
+    return dx * dx + dy * dy;
   }
 }
