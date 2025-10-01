@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MONSTERS, type MonsterDefinition, type MonsterId, type Move, type MoveId } from '@content/monsters';
 const TELEGRAPH_COLORS = {
   preWarn: 0xffe066,
   windUp: 0xffa149,
@@ -79,14 +80,16 @@ export type TelegraphHitCandidate = {
 };
 
 export class Monster extends Phaser.Physics.Arcade.Sprite {
-  private hpMax = 12;
+  private monsterId: MonsterId = 'brine_walker';
+  private moveDefinitions: Record<MoveId, Move> = MONSTERS.brine_walker.moves;
+  private moveOrder: MoveId[] = [...MONSTERS.brine_walker.moveOrder];
+  private moveCooldowns: Record<MoveId, number> = { sweep: 0, smash: 0, rush: 0, roar: 0 };
+  private hpMax = MONSTERS.brine_walker.stats.hp;
   hp = this.hpMax;
-  state: 'wander'|'chase'|'engage' = 'wander';
-  actionT = { sweep: 2.5, smash: 4.0, rush: 5.0, roar: 7.0 };
-  cd = { sweep: 0, smash: 0, rush: 0, roar: 0 };
-  private baseMoveSpeed = 140;
+  state: 'wander' | 'chase' | 'engage' = 'wander';
+  private baseMoveSpeed = MONSTERS.brine_walker.stats.speed;
   target?: Phaser.Types.Physics.Arcade.GameObjectWithBody;
-  private baseTint = 0xffffff;
+  private baseTint = MONSTERS.brine_walker.baseTint;
   private baseScale = { x: 1, y: 1 };
   private baseAngle = 0;
   private actionLock = false;
@@ -99,8 +102,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private hpBarRageZone: Phaser.GameObjects.Rectangle;
   private hpBarFill: Phaser.GameObjects.Rectangle;
   private hpBarWidth = 52;
-  private readonly rageThresholdRatio = 0.4;
-  private readonly rageSpeedMultiplier = 1.4;
+  private rageThresholdRatio = MONSTERS.brine_walker.rage.threshold;
+  private rageSpeedMultiplier = MONSTERS.brine_walker.rage.speedMultiplier;
   private enraged = false;
   private facing: 'up' | 'down' | 'left' | 'right' = 'down';
   private pushSlowTimer = 0;
@@ -929,11 +932,30 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
 
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, monsterId: MonsterId = 'brine_walker') {
     super(scene, x, y, 'monster', 0);
+    this.monsterId = monsterId;
+    const config: MonsterDefinition = MONSTERS[monsterId] ?? MONSTERS.brine_walker;
+    this.hpMax = config.stats.hp;
+    this.hp = this.hpMax;
+    this.baseMoveSpeed = config.stats.speed;
+    this.baseTint = config.baseTint;
+    this.rageThresholdRatio = config.rage.threshold;
+    this.rageSpeedMultiplier = config.rage.speedMultiplier;
+    this.moveDefinitions = { ...MONSTERS.brine_walker.moves, ...config.moves };
+    const baseOrder = config.moveOrder.slice() as MoveId[];
+    const configuredMoves = Object.keys(config.moves) as MoveId[];
+    const fallbackMoves = Object.keys(MONSTERS.brine_walker.moves) as MoveId[];
+    const orderedMoves = Array.from(new Set<MoveId>([...baseOrder, ...configuredMoves, ...fallbackMoves]));
+    this.moveOrder = orderedMoves;
+    this.moveCooldowns = orderedMoves.reduce<Record<MoveId, number>>((acc, moveId) => {
+      acc[moveId] = 0;
+      return acc;
+    }, { ...this.moveCooldowns });
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setScale(0.9);
+    this.setTint(this.baseTint);
     const body = this.body as Phaser.Physics.Arcade.Body;
     const monsterScaleX = Math.abs(this.scaleX) || 1;
     const monsterScaleY = Math.abs(this.scaleY) || 1;
@@ -1006,7 +1028,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     const pushSlowFactor = this.pushSlowTimer > 0 ? 0.55 : 1;
 
     // cooldowns
-    for (const k in this.cd) (this.cd as any)[k] = Math.max(0, (this.cd as any)[k] - dt);
+    Object.keys(this.moveCooldowns).forEach((key) => {
+      const moveId = key as MoveId;
+      this.moveCooldowns[moveId] = Math.max(0, this.moveCooldowns[moveId] - dt);
+    });
 
     // maintain a gentle sway while walking unless a telegraph is running.
     if (!this.actionLock) {
@@ -1050,11 +1075,15 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       this.moveToward(player, moveSpeed * 1.0 * pushSlowFactor);
     } else {
       this.moveToward(player, moveSpeed * 1.1 * pushSlowFactor);
-      // pick an action; each handler manages its telegraph and cooldown timing
-      if (this.cd.sweep === 0) { this.sweep(player); this.cd.sweep = this.actionT.sweep; }
-      else if (this.cd.smash === 0) { this.smash(player); this.cd.smash = this.actionT.smash; }
-      else if (this.cd.rush === 0) { this.rush(player); this.cd.rush = this.actionT.rush; }
-      else if (this.cd.roar === 0) { this.roar(player); this.cd.roar = this.actionT.roar; }
+      for (const moveId of this.moveOrder) {
+        if ((this.moveCooldowns[moveId] ?? 0) > 0) {
+          continue;
+        }
+        if (this.performMove(moveId, player)) {
+          this.moveCooldowns[moveId] = this.getMoveConfig(moveId).cooldown;
+          break;
+        }
+      }
     }
   }
 
@@ -1071,6 +1100,29 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
     direction.normalize().scale(speed);
     this.setVelocity(direction.x, direction.y);
+  }
+
+  private getMoveConfig(moveId: MoveId): Move {
+    return this.moveDefinitions[moveId] ?? MONSTERS.brine_walker.moves[moveId];
+  }
+
+  private performMove(moveId: MoveId, player: Phaser.Physics.Arcade.Sprite) {
+    switch (moveId) {
+      case 'sweep':
+        this.sweep(player);
+        return true;
+      case 'smash':
+        this.smash(player);
+        return true;
+      case 'rush':
+        this.rush(player);
+        return true;
+      case 'roar':
+        this.roar(player);
+        return true;
+      default:
+        return false;
+    }
   }
 
   getPushIntent() {
@@ -1175,7 +1227,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
-    const baseTimings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 200, recovery: 400 };
+    const baseTimings = this.getMoveConfig('sweep').timings;
     const timings = this.scaleTimingsForRage(baseTimings);
     let telegraph: TelegraphHandle | undefined;
     const sweepRange = 120;
@@ -1249,7 +1301,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   smash(player: Phaser.Physics.Arcade.Sprite) {
-    const baseTimings: TelegraphTimings = { preWarn: 300, windUp: 450, commit: 180, recovery: 450 };
+    const baseTimings = this.getMoveConfig('smash').timings;
     const timings = this.scaleTimingsForRage(baseTimings);
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
@@ -1304,7 +1356,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   rush(player: Phaser.Physics.Arcade.Sprite) {
-    const baseTimings: TelegraphTimings = { preWarn: 300, windUp: 400, commit: 300, recovery: 500 };
+    const baseTimings = this.getMoveConfig('rush').timings;
     const timings = this.scaleTimingsForRage(baseTimings);
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
@@ -1361,7 +1413,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   roar(player: Phaser.Physics.Arcade.Sprite) {
-    const baseTimings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 150, recovery: 350 };
+    const baseTimings = this.getMoveConfig('roar').timings;
     const timings = this.scaleTimingsForRage(baseTimings);
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
