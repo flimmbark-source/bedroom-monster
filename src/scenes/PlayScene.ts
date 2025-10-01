@@ -69,12 +69,12 @@ export class PlayScene extends Phaser.Scene {
   private fxDepth = 200;
   private aimAngle = -Math.PI / 2;
   private restockPoints = [
-    { x: 360, y: 240 },
-    { x: 360, y: 520 },
+    { x: 400, y: 360 },
     { x: 640, y: 360 },
-    { x: 920, y: 240 },
-    { x: 920, y: 520 },
-    { x: 640, y: 640 },
+    { x: 880, y: 360 },
+    { x: 400, y: 700 },
+    { x: 640, y: 700 },
+    { x: 880, y: 700 },
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   private furniture: SearchableFurniture[] = [];
@@ -416,12 +416,18 @@ export class PlayScene extends Phaser.Scene {
     // items on ground
     this.itemsGroup = this.physics.add.staticGroup();
     // starter items
-    this.createGroundItem(360, 240, 'knife');
-    this.createGroundItem(920, 240, 'bottle');
-    this.createGroundItem(640, 360, 'soda');
-    this.createGroundItem(360, 520, 'match');
-    this.createGroundItem(920, 520, 'bandaid');
-    this.createGroundItem(640, 640, 'yoyo');
+    const starterItems: Item['id'][] = [
+      'knife',
+      'bottle',
+      'soda',
+      'match',
+      'bandaid',
+      'yoyo',
+    ];
+    starterItems.forEach((itemId, index) => {
+      const point = this.restockPoints[index % this.restockPoints.length];
+      this.createGroundItem(point.x, point.y, itemId);
+    });
 
     this.time.addEvent({
       delay: 15000,
