@@ -976,7 +976,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       const speed = body.velocity.length() || 0;
       if (speed > 40) {
         this.idleTween?.pause();
-        this.setScale(1.05, 0.95);
+        this.setScale(this.baseScale.x * 1.05, this.baseScale.y * 0.95);
       } else if (!this.currentChain) {
         this.resetPose();
         this.idleTween?.resume();
