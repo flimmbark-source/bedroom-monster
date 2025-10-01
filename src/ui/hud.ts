@@ -3,6 +3,7 @@ import { ROOM_W } from '@game/config';
 import type { Inventory } from '@game/types';
 import { ITEMS, cloneItem, type Item } from '@game/items';
 import { craft } from '@game/recipes';
+import { watchKeys, getKeyMetadata, type KeyId } from '@game/keys';
 
 export type HudShoveIndicator = {
   base: Phaser.GameObjects.Graphics;
@@ -31,6 +32,11 @@ export type HudElements = {
   };
 
   shoveIndicator: HudShoveIndicator;
+
+  keyBadges: {
+    root: Phaser.GameObjects.Container;
+    dispose: () => void;
+  };
 };
 
 export type HudUpdateOptions = {
@@ -91,6 +97,61 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
   const pill1 = makePill(pillX, 12 + 28 + 6);     // HP plate bottom + gap
   const pill2 = makePill(pillX, 12 + 28 + 6 + 24);
 
+  // Key badge row (beneath inventory pills)
+  const badgeRowY = pill2.root.y + pill2.h + 8;
+  const keyBadgeRoot = scene.add.container(pillX, badgeRowY).setScrollFactor(0);
+  container.add(keyBadgeRoot);
+
+  type BadgeVisual = {
+    root: Phaser.GameObjects.Container;
+    bg: Phaser.GameObjects.Graphics;
+    label: Phaser.GameObjects.Text;
+  };
+
+  const badgePool: BadgeVisual[] = [];
+  const badgeWidth = 34;
+  const badgeHeight = 18;
+  const badgeGap = 6;
+
+  const ensureBadge = (index: number): BadgeVisual => {
+    if (badgePool[index]) return badgePool[index];
+    const root = scene.add.container(index * (badgeWidth + badgeGap), 0).setScrollFactor(0).setVisible(false);
+    const bg = scene.add.graphics();
+    const label = scene.add.text(badgeWidth / 2, badgeHeight / 2, '', {
+      fontFamily: 'monospace',
+      fontSize: '11px',
+      color: '#101820',
+    }).setOrigin(0.5);
+    root.add([bg, label]);
+    keyBadgeRoot.add(root);
+    const visual: BadgeVisual = { root, bg, label };
+    badgePool.push(visual);
+    return visual;
+  };
+
+  const updateBadges = (keys: KeyId[]) => {
+    for (let i = 0; i < keys.length; i += 1) {
+      const badge = ensureBadge(i);
+      const meta = getKeyMetadata(keys[i]);
+      badge.root.setPosition(i * (badgeWidth + badgeGap), 0);
+      badge.bg.clear();
+      badge.bg.fillStyle(meta.color, 0.92).fillRoundedRect(0, 0, badgeWidth, badgeHeight, 6);
+      badge.bg.lineStyle(1, 0x1a202b, 0.9).strokeRoundedRect(0, 0, badgeWidth, badgeHeight, 6);
+      badge.label.setText(meta.shortLabel).setColor('#101820');
+      badge.root.setVisible(true);
+    }
+    for (let i = keys.length; i < badgePool.length; i += 1) {
+      badgePool[i].root.setVisible(false);
+    }
+  };
+
+  const stopWatch = watchKeys(updateBadges);
+  scene.events.once('shutdown', () => {
+    stopWatch();
+    badgePool.forEach((badge) => badge.root.destroy());
+    keyBadgeRoot.destroy();
+  });
+
   // Craft preview (top-center) — compact
   const cpW = 220, cpH = 24;
   const cpRoot = scene.add.container(scene.scale.width/2, 10).setScrollFactor(0).setDepth(1001).setVisible(false);
@@ -129,11 +190,29 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
   // Initial draw
   const initialInv: Inventory = [null, null];
   drawHUD(
-    { container, heartPlate, hearts, slotPills: [pill1 as any, pill2 as any], craftPreview, shoveIndicator },
-    maxHp, maxHp, initialInv
+    {
+      container,
+      heartPlate,
+      hearts,
+      slotPills: [pill1 as any, pill2 as any],
+      craftPreview,
+      shoveIndicator,
+      keyBadges: { root: keyBadgeRoot, dispose: stopWatch },
+    },
+    maxHp,
+    maxHp,
+    initialInv,
   );
 
-  return { container, heartPlate, hearts, slotPills: [pill1 as any, pill2 as any], craftPreview, shoveIndicator };
+  return {
+    container,
+    heartPlate,
+    hearts,
+    slotPills: [pill1 as any, pill2 as any],
+    craftPreview,
+    shoveIndicator,
+    keyBadges: { root: keyBadgeRoot, dispose: stopWatch },
+  };
 }
 
 function setPill(

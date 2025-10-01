@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { PLAYER_BASE } from '@game/config';
-import { ITEM_TEXTURE_PATHS } from '@game/items';
+import { ITEM_ICON_SOURCES } from '@game/items';
+import { DoorSystem, resetDoors } from '@game/doors';
+import { resetKeys } from '@game/keys';
+import type { DoorDefinition, RoomId } from '@game/world';
 import { Monster, type TelegraphImpact, type MonsterHitbox } from '@game/monster';
 import { createHUD, drawHUD, type HudElements } from '@ui/hud';
 import { createEndCard, type EndCardElements } from '@ui/endCard';
@@ -11,7 +14,7 @@ import { SearchSystem, type SpawnEmojiFn } from '../systems/SearchSystem';
 import { TelegraphSystem, type MonsterDamageEvent } from '../systems/TelegraphSystem';
 
 type TelegraphSfxKey = 'whoosh' | 'rise' | 'crack' | 'thud';
-import { ROOMS, pickWeightedValue, type RoomConfig, type RoomId } from '@content/rooms';
+import { ROOMS, pickWeightedValue, type RoomConfig } from '@content/rooms';
 
 const DEFAULT_ROOM_ID: RoomId = 'hallway';
 
@@ -27,6 +30,7 @@ export class PlayScene extends Phaser.Scene {
   private spawnerSystem!: SpawnerSystem;
   private searchSystem!: SearchSystem;
   private telegraphSystem!: TelegraphSystem;
+  private doorSystem?: DoorSystem;
   private fxDepth = 200;
   private overItem: GroundItem | null = null;
   private playerIFrameUntil = 0;
@@ -87,6 +91,9 @@ export class PlayScene extends Phaser.Scene {
   }
 
   create() {
+    resetKeys();
+    resetDoors();
+
     this.roomConfig = ROOMS[DEFAULT_ROOM_ID];
     this.resetPlayerState();
     this.createAnimations();
@@ -148,6 +155,11 @@ export class PlayScene extends Phaser.Scene {
     this.player.setDepth(10);
     this.player.anims.play('player-idle-down');
 
+    this.doorSystem = new DoorSystem(this, this.player, {
+      onDoorOpened: (door) => this.handleDoorOpened(door),
+    });
+    this.doorSystem.setRoom(this.roomConfig.id);
+
     this.inputSystem.setPlayer(this.player);
     this.inputSystem.create();
 
@@ -185,7 +197,10 @@ export class PlayScene extends Phaser.Scene {
     );
 
     this.events.on('play-sfx', this.playStubSfx, this);
-    this.events.once('shutdown', () => this.events.off('play-sfx', this.playStubSfx, this));
+    this.events.once('shutdown', () => {
+      this.events.off('play-sfx', this.playStubSfx, this);
+      this.doorSystem?.destroy();
+    });
 
     this.spawnerSystem.spawnInitialItems([...this.roomConfig.starterItems]);
     this.spawnerSystem.scheduleRestock(this.roomConfig.spawnPacing);
@@ -202,6 +217,9 @@ export class PlayScene extends Phaser.Scene {
 
   tryPickup(): boolean {
     if (this.runEnded) return false;
+    if (this.doorSystem?.tryInteract()) {
+      return true;
+    }
     if (!this.overItem) return false;
     const success = this.inventorySystem.tryPickup(this.overItem);
     if (success && (!this.overItem.active || !this.physics.overlap(this.player, this.overItem as any))) {
@@ -724,6 +742,10 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
+  private handleDoorOpened(door: DoorDefinition) {
+    this.events.emit('door-opened', door);
+  }
+
   private refreshHUD() {
     const now = this.time.now;
     const shoveRemaining = Math.max(this.playerShoveCooldownUntil - now, 0);
@@ -736,6 +758,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number) {
+    this.doorSystem?.update();
     if (this.runEnded) {
       return;
     }
