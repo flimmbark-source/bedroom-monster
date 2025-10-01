@@ -1,10 +1,10 @@
 import type { ItemId } from '@game/types';
+import type { RoomId } from '@game/world';
 import type { MonsterId } from '@content/monsters';
 import type { FurnitureLayoutEntry } from '../systems/SearchSystem';
 
 export type Weighted<T> = { id: T; weight: number };
-
-export type RoomId = 'hallway' | 'infirmary' | 'office' | 'kitchen' | 'entrance';
+export type { RoomId };
 
 export type SpawnPacing = {
   restockIntervalMs: number;
