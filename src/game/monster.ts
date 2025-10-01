@@ -153,10 +153,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     const visibleHeight = frameHeight - visibleTop - visibleBottom;
     const scaleX = Math.abs(this.scaleX) || 1;
     const scaleY = Math.abs(this.scaleY) || 1;
-    const bodyWidth = frameWidth * scaleX;
-    const bodyHeight = visibleHeight * scaleY;
+    const bodyWidth = (frameWidth * scaleX) / 2;
+    const bodyHeight = (visibleHeight * scaleY);
     const offsetX = (frameWidth * scaleX - bodyWidth) / 2;
-    const offsetY = visibleTop * scaleY;
+    const offsetY = (visibleTop * scaleY) * 2;
 
     body.setSize(bodyWidth, bodyHeight);
     body.setOffset(offsetX, offsetY);
