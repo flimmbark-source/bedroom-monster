@@ -104,6 +104,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private enraged = false;
   private facing: 'up' | 'down' | 'left' | 'right' = 'down';
   private pushSlowTimer = 0;
+  private spawnBurstTimer = 0;
   private lastMoveIntent = new Phaser.Math.Vector2(0, 0);
   private hitboxDefs: MonsterHitboxDefinition[] = [
     {
@@ -162,6 +163,21 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   private getMoveSpeed() {
     return this.baseMoveSpeed * (this.isEnraged() ? this.rageSpeedMultiplier : 1);
+  }
+
+  startSpawnBurst(direction: Phaser.Math.Vector2Like, speed: number, duration: number) {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) return;
+
+    const burstDirection = new Phaser.Math.Vector2(direction.x, direction.y);
+    if (burstDirection.lengthSq() === 0) return;
+
+    burstDirection.normalize().scale(speed);
+    this.setVelocity(burstDirection.x, burstDirection.y);
+    this.spawnBurstTimer = duration;
+    this.updateFacingFromVelocity();
+    this.playMovementAnimation(true);
+    this.idleTween?.pause();
   }
 
   private scaleAttackDuration(duration: number) {
@@ -932,6 +948,17 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.updateRageState();
     const body = this.body as Phaser.Physics.Arcade.Body | undefined;
     if (!body) {
+      return;
+    }
+
+    if (this.spawnBurstTimer > 0) {
+      this.spawnBurstTimer = Math.max(0, this.spawnBurstTimer - dt);
+      this.updateFacingFromVelocity();
+      this.playMovementAnimation(true);
+      this.idleTween?.pause();
+      if (this.spawnBurstTimer === 0) {
+        this.setVelocity(0, 0);
+      }
       return;
     }
 
