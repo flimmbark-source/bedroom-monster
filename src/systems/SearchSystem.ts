@@ -174,7 +174,7 @@ export class SearchSystem {
         rect,
         searchDuration: options.searchDuration ?? 2400,
         checkPoints: options.checkPoints ?? [0.5],
-        lootTable: options.lootTable ?? ['tape_roll', 'cooking_oil', 'flare'],
+        lootTable: options.lootTable ?? ['bandaid', 'bottle', 'match'],
         findChance: options.findChance ?? 0.4,
         emoji: options.emoji ?? this.getFurnitureEmoji(options.name ?? ''),
         emojiLabel: this.scene.add
@@ -194,16 +194,6 @@ export class SearchSystem {
 
   loadFurnitureLayout(layout: FurnitureLayoutEntry[]) {
     layout.forEach(({ x, y, options }) => this.addFurnitureBlock(x, y, options));
-  }
-
-  clearFurniture() {
-    this.furnitureGroup.clear(true, true);
-    this.furniture.forEach((entry) => {
-      if (entry.emojiLabel.active) {
-        entry.emojiLabel.destroy();
-      }
-    });
-    this.furniture = [];
   }
 
   handlePlayerFurnitureCollision = (
