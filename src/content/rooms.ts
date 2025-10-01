@@ -173,7 +173,8 @@ const ROOM_KEY_DROPS: Record<RoomId, Weighted<KeyId>[]> = {
 
 const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
   {
-    x: 420,
+
+    x: 360,
     y: 260,
     options: {
       searchable: true,
@@ -189,15 +190,14 @@ const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
         scale: 0.6,
       },
       hitbox: {
-        units: 'world',
-        width: 220,
-        height: 150,
-        offsetY: 26,
+        width: 219,
+        height: 190,
+        offsetY: 58,
       },
     },
   },
   {
-    x: 540,
+    x: 470,
     y: 260,
     options: {
       searchable: true,
@@ -213,15 +213,14 @@ const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
         scale: 0.6,
       },
       hitbox: {
-        units: 'world',
-        width: 90,
-        height: 130,
-        offsetY: 18,
+        width: 98,
+        height: 150,
+        offsetY: 36,
       },
     },
   },
   {
-    x: 700,
+    x: 640,
     y: 260,
     options: {
       searchable: true,
@@ -237,15 +236,14 @@ const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
         scale: 0.6,
       },
       hitbox: {
-        units: 'world',
-        width: 220,
-        height: 150,
-        offsetY: 26,
+        width: 219,
+        height: 190,
+        offsetY: 58,
       },
     },
   },
   {
-    x: 820,
+    x: 750,
     y: 260,
     options: {
       searchable: true,
@@ -261,15 +259,14 @@ const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
         scale: 0.6,
       },
       hitbox: {
-        units: 'world',
-        width: 90,
-        height: 130,
-        offsetY: 18,
+        width: 98,
+        height: 150,
+        offsetY: 36,
       },
     },
   },
   {
-    x: 980,
+    x: 920,
     y: 260,
     options: {
       searchable: true,
@@ -285,15 +282,14 @@ const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
         scale: 0.6,
       },
       hitbox: {
-        units: 'world',
-        width: 220,
-        height: 150,
-        offsetY: 26,
+        width: 219,
+        height: 190,
+        offsetY: 58,
       },
     },
   },
   {
-    x: 1100,
+    x: 1030,
     y: 260,
     options: {
       searchable: true,
@@ -309,10 +305,9 @@ const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
         scale: 0.6,
       },
       hitbox: {
-        units: 'world',
-        width: 90,
-        height: 130,
-        offsetY: 18,
+        width: 98,
+        height: 150,
+        offsetY: 36,
       },
     },
   },
@@ -333,15 +328,14 @@ const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
         scale: 0.6,
       },
       hitbox: {
-        units: 'world',
-        width: 200,
-        height: 90,
-        offsetY: 16,
+        width: 216,
+        height: 120,
+        offsetY: 20,
       },
     },
   },
   {
-    x: 880,
+    x: 760,
     y: 560,
     options: {
       searchable: true,
@@ -357,10 +351,9 @@ const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
         scale: 0.6,
       },
       hitbox: {
-        units: 'world',
-        width: 200,
-        height: 90,
-        offsetY: 16,
+        width: 216,
+        height: 120,
+        offsetY: 20,
       },
     },
   },
