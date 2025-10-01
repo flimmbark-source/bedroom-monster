@@ -188,18 +188,13 @@ export function drawHUD(
   setPill(slotPills[1], inv[1]);
 
   // Craft preview pill (top-center) — only if recipe exists
-  let showCraft = false;
-  if (inv[0]?.id && inv[1]?.id) {
-    const outId = craft(inv[0].id, inv[1].id);
-    if (outId) {
-      const def = ITEMS[outId];
-      if (def) {
-        const fakeItem = cloneItem(outId);
-        setIcon(craftPreview.icon, fakeItem);
-        craftPreview.name.setText(def.label ? `Craft: ${def.label}` : 'Craft');
-        showCraft = true;
-      }
-    }
+  const outId = craft(inv[0]?.id ?? null, inv[1]?.id ?? null);
+  const def = outId ? ITEMS[outId] : undefined;
+  const showCraft = Boolean(def);
+  if (def) {
+    const fakeItem = cloneItem(outId);
+    setIcon(craftPreview.icon, fakeItem);
+    craftPreview.name.setText(def.label ? `Craft: ${def.label}` : 'Craft');
   }
   craftPreview.show(showCraft);
 
