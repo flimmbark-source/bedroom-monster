@@ -593,7 +593,7 @@ export class PlayScene extends Phaser.Scene {
     } else {
       this.hitstopUntil = 0;
       this.pendingPostHitstop.length = 0;
-      const playerBody = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+      const playerBody = this.player?.body as Phaser.Physics.Arcade.Body | undefined;
       const monsterBody = this.monster?.body as Phaser.Physics.Arcade.Body | undefined;
       if (playerBody) playerBody.moves = true;
       if (monsterBody) monsterBody.moves = true;
@@ -602,10 +602,11 @@ export class PlayScene extends Phaser.Scene {
       this.playerBlinkEvent.destroy();
       this.playerBlinkEvent = undefined;
     }
-    this.player.setAlpha(1);
+    this.player?.setAlpha(1);
     this.inputSystem?.reset();
-    if (this.player?.body) {
-      (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 260;
+    const playerBody = this.player?.body as Phaser.Physics.Arcade.Body | undefined;
+    if (playerBody) {
+      playerBody.maxSpeed = 260;
     }
   }
 
