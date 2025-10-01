@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { MONSTER_SPRITES, type MonsterSpriteDefinition } from '@content/monsterSprites';
 import { MONSTERS, type MonsterDefinition, type MonsterId, type Move, type MoveId } from '@content/monsters';
+import { MonsterHurtbox, type MonsterPose, type MonsterStateTag, type HurtboxShapeInstance } from '../combat/monsterHurtbox';
+import { getShapeBounds } from '../combat/shapes';
 const TELEGRAPH_COLORS = {
   preWarn: 0xffe066,
   windUp: 0xffa149,
@@ -39,15 +41,12 @@ export type TelegraphImpact = {
 
 export type MonsterHitboxDefinition = {
   id: string;
-  part: string;
-  width: number;
-  height: number;
-  offsetX: number;
-  offsetY: number;
+  part: HurtboxShapeInstance['part'];
   damageMultiplier?: number;
 };
 
 export type MonsterHitbox = MonsterHitboxDefinition & {
+  shape: HurtboxShapeInstance['shape'];
   rect: Phaser.Geom.Rectangle;
   damageMultiplier: number;
 };
@@ -116,16 +115,13 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private readonly walkStretchEnterSpeed = 60;
   private readonly walkStretchExitSpeed = 25;
   private burningUntil = 0;
+  private hurtbox: MonsterHurtbox;
+  private hurtState: MonsterStateTag = 'idle';
+  private lastPose: MonsterPose;
   private hitboxDefs: MonsterHitboxDefinition[] = [
-    {
-      id: 'core',
-      part: 'core',
-      width: 184,
-      height: 215,
-      offsetX: 0,
-      offsetY: 8,
-      damageMultiplier: 1,
-    },
+    { id: 'core', part: 'core', damageMultiplier: 1 },
+    { id: 'head', part: 'head', damageMultiplier: 1.15 },
+    { id: 'tail', part: 'tail', damageMultiplier: 0.85 },
   ];
 
 
@@ -178,6 +174,44 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.setFacingFromVector(body.velocity.x, body.velocity.y);
   }
 
+  private getFacingAngle() {
+    const facingAngles: Record<'up' | 'down' | 'left' | 'right', number> = {
+      up: -Math.PI / 2,
+      down: Math.PI / 2,
+      left: Math.PI,
+      right: 0,
+    };
+    const base = facingAngles[this.facing] ?? 0;
+    return Phaser.Math.Angle.Wrap(base + this.rotation);
+  }
+
+  private buildPose(stateOverride?: MonsterStateTag): MonsterPose {
+    return {
+      x: this.x,
+      y: this.y,
+      angle: this.getFacingAngle(),
+      state: stateOverride ?? this.hurtState,
+      species: this.monsterId,
+    };
+  }
+
+  private updateHurtbox(stateOverride?: MonsterStateTag) {
+    if (!this.hurtbox) {
+      return;
+    }
+    const pose = this.buildPose(stateOverride);
+    this.lastPose = pose;
+    this.hurtbox.update(pose);
+  }
+
+  private setHurtState(state: MonsterStateTag) {
+    if (this.hurtState === state) {
+      return;
+    }
+    this.hurtState = state;
+    this.updateHurtbox(state);
+  }
+
   private playMovementAnimation(moving: boolean) {
     this.anims.play(this.movementAnimKey(moving), true);
   }
@@ -219,6 +253,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     burstDirection.normalize().scale(speed * this.getStatusSpeedMultiplier());
     this.setVelocity(burstDirection.x, burstDirection.y);
     this.spawnBurstTimer = duration;
+    this.setHurtState('dash');
     this.updateFacingFromVelocity();
     this.playMovementAnimation(true);
     this.idleTween?.pause();
@@ -328,18 +363,18 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   getHitboxes(): MonsterHitbox[] {
-    const scaleX = Math.abs(this.scaleX) || 1;
-    const scaleY = Math.abs(this.scaleY) || 1;
-    return this.hitboxDefs.map((def) => {
-      const width = def.width * scaleX;
-      const height = def.height * scaleY;
-      const x = this.x + def.offsetX * this.scaleX / 6;
-      const y = this.y + def.offsetY * this.scaleY / 6;
-      const rect = new Phaser.Geom.Rectangle(x - width / 2, y - height / 2, width, height);
+    const pose = this.lastPose ?? this.buildPose();
+    const shapes = this.hurtbox.shapes(pose);
+    return shapes.map(({ part, shape }) => {
+      const def = this.hitboxDefs.find((candidate) => candidate.part === part);
+      const damageMultiplier = def?.damageMultiplier ?? 1;
+      const id = def?.id ?? part;
       return {
-        ...def,
-        rect,
-        damageMultiplier: def.damageMultiplier ?? 1,
+        id,
+        part,
+        shape,
+        rect: getShapeBounds(shape),
+        damageMultiplier,
       };
     });
   }
@@ -461,6 +496,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.strokeAlpha = 0.7;
         state.strokeWidth = 5;
         this.emitTelegraphSfx('whoosh');
+        this.setHurtState('windup');
         draw();
       },
       startWindUp: () => {
@@ -471,6 +507,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.strokeAlpha = 0.95;
         state.strokeWidth = 7.5;
         this.emitTelegraphSfx('rise');
+        this.setHurtState('windup');
         draw();
         stopPulse();
         pulse = this.scene.tweens.addCounter({
@@ -496,6 +533,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.strokeAlpha = 1;
         state.strokeWidth = 8;
         this.emitTelegraphSfx('crack');
+        this.setHurtState('commit');
         draw();
         this.scene.tweens.add({
           targets: state,
@@ -509,6 +547,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         telegraph.setPhase('recovery');
         stopPulse();
         state.color = TELEGRAPH_COLORS.recovery;
+        this.setHurtState('recover');
         draw();
         this.scene.tweens.add({
           targets: state,
@@ -604,6 +643,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         fill.setFillStyle(TELEGRAPH_COLORS.preWarn, 0.4);
         outline.setStrokeStyle(6, TELEGRAPH_COLORS.preWarn, 0.75);
         this.emitTelegraphSfx('whoosh');
+        this.setHurtState('windup');
         this.scene.tweens.add({
           targets: target,
           scale: 0.92,
@@ -619,6 +659,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         outline.setStrokeStyle(9, TELEGRAPH_COLORS.windUp, 0.95);
         stopPulse();
         this.emitTelegraphSfx('rise');
+        this.setHurtState('windup');
         pulse = this.scene.tweens.add({
           targets: target,
           scale: { from: 1.02, to: 0.9 },
@@ -637,6 +678,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         fill.setAlpha(1);
         outline.setAlpha(1);
         this.emitTelegraphSfx('crack');
+        this.setHurtState('commit');
         updatePosition();
         this.scene.tweens.add({
           targets: [fill, outline],
@@ -652,6 +694,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         outline.setStrokeStyle(8, TELEGRAPH_COLORS.recovery, 0.8);
         fill.setAlpha(0.7);
         outline.setAlpha(0.7);
+        this.setHurtState('recover');
         this.scene.tweens.add({
           targets: [fill, outline],
           alpha: { from: 0.7, to: 0 },
@@ -770,6 +813,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.strokeAlpha = 0.75;
         state.strokeWidth = 5;
         this.emitTelegraphSfx('whoosh');
+        this.setHurtState('windup');
         draw();
       },
       startWindUp: () => {
@@ -782,6 +826,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.strokeAlpha = 0.95;
         state.strokeWidth = 7.5;
         this.emitTelegraphSfx('rise');
+        this.setHurtState('windup');
         draw();
         stopPulse();
         pulse = this.scene.tweens.addCounter({
@@ -807,6 +852,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         state.strokeAlpha = 1;
         state.strokeWidth = 8;
         this.emitTelegraphSfx('crack');
+        this.setHurtState('dash');
         draw();
         this.scene.tweens.add({
           targets: state,
@@ -824,6 +870,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         telegraph.setPhase('recovery');
         stopPulse();
         state.color = TELEGRAPH_COLORS.recovery;
+        this.setHurtState('recover');
         draw();
         this.scene.tweens.add({
           targets: state,
@@ -915,6 +962,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         outerEdge.setScale(0.94);
         innerEdge.setScale(0.94);
         this.emitTelegraphSfx('whoosh');
+        this.setHurtState('windup');
       },
       startWindUp: () => {
         telegraph.setPhase('windUp');
@@ -923,6 +971,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         innerEdge.setStrokeStyle(3, TELEGRAPH_COLORS.windUp, 0.85);
         stopPulse();
         this.emitTelegraphSfx('rise');
+        this.setHurtState('windup');
         pulse = this.scene.tweens.add({
           targets: [ring, outerEdge, innerEdge],
           scale: { from: 1.03, to: 0.97 },
@@ -942,6 +991,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         outerEdge.setAlpha(1);
         innerEdge.setAlpha(1);
         this.emitTelegraphSfx('crack');
+        this.setHurtState('commit');
         this.scene.tweens.add({
           targets: [ring, outerEdge, innerEdge],
           alpha: { from: 1, to: 0.72 },
@@ -958,6 +1008,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         ring.setAlpha(0.72);
         outerEdge.setAlpha(0.72);
         innerEdge.setAlpha(0.7);
+        this.setHurtState('recover');
         this.scene.tweens.add({
           targets: [ring, outerEdge, innerEdge],
           alpha: { from: 0.72, to: 0 },
@@ -977,6 +1028,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, spriteConfig.textureKey, 0);
     this.monsterId = monsterId;
     this.spriteConfig = spriteConfig;
+    this.hurtbox = new MonsterHurtbox(monsterId);
     const config: MonsterDefinition = MONSTERS[monsterId] ?? MONSTERS.brine_walker;
     this.hpMax = config.stats.hp;
     this.hp = this.hpMax;
@@ -1023,6 +1075,9 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       .setDepth(this.depth + 5);
     this.refreshHpBar();
 
+    this.lastPose = this.buildPose();
+    this.hurtbox.update(this.lastPose);
+
     // Gentle idle breathing so the monster feels alive between actions.
     this.idleTween = scene.tweens.add({
       targets: this,
@@ -1038,6 +1093,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   update(dt: number, player: Phaser.Physics.Arcade.Sprite) {
     this.layoutHpBar();
     this.updateRageState();
+    this.updateHurtbox();
     const body = this.body as Phaser.Physics.Arcade.Body | undefined;
     if (!body) {
       return;
@@ -1048,8 +1104,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       this.updateFacingFromVelocity();
       this.playMovementAnimation(true);
       this.idleTween?.pause();
+      this.setHurtState('dash');
       if (this.spawnBurstTimer === 0) {
         this.setVelocity(0, 0);
+        this.setHurtState('idle');
       }
       return;
     }
@@ -1091,8 +1149,12 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
       if (moving) {
         this.updateFacingFromVelocity();
-      } else if (player) {
-        this.setFacingFromVector(player.x - this.x, player.y - this.y);
+        this.setHurtState('chase');
+      } else {
+        if (player) {
+          this.setFacingFromVector(player.x - this.x, player.y - this.y);
+        }
+        this.setHurtState('idle');
       }
       this.playMovementAnimation(moving);
     }
@@ -1217,6 +1279,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.currentChain?.stop();
     this.idleTween?.pause();
     this.anims.stop();
+    this.setHurtState('windup');
 
     const telegraphTweens = Array.isArray(config.telegraph) ? config.telegraph : [config.telegraph];
     const attackTweens = Array.isArray(config.attack) ? config.attack : [config.attack];
@@ -1228,8 +1291,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       tweens: sequence,
       onComplete: () => {
         this.currentChain = undefined;
+        this.setHurtState('recover');
         config.cooldown.onStart?.();
         this.scene.time.delayedCall(config.cooldown.duration, () => {
+          this.setHurtState('idle');
           this.resetPose();
           this.actionLock = false;
           this.idleTween?.resume();
