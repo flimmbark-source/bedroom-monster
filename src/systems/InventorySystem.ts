@@ -85,7 +85,6 @@ export class InventorySystem {
   craft() {
     const first = this.inventory[0]?.id;
     const second = this.inventory[1]?.id;
-    if (!first || !second) return false;
     const result = craftRecipe(first, second);
     if (!result) return false;
     this.inventory[0] = { ...cloneItem(result) };

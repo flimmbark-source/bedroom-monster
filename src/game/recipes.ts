@@ -3,15 +3,26 @@ import type { ItemId } from './items';
 export type Recipe = { a: ItemId; b: ItemId; out: ItemId };
 
 export const RECIPES: Recipe[] = [
+  { a: 'bandaid', b: 'match', out: 'smoke_patch' },
+  { a: 'bandaid', b: 'soda', out: 'adrenal_patch' },
+  { a: 'bottle', b: 'knife', out: 'glass_shiv' },
   { a: 'bottle', b: 'match', out: 'fire_bottle' },
-  { a: 'yoyo',   b: 'knife', out: 'bladed_yoyo' },
-  { a: 'knife',  b: 'bottle', out: 'glass_shiv' },
-  { a: 'match',  b: 'bandaid', out: 'smoke_patch' },
-  { a: 'soda',   b: 'bandaid', out: 'adrenal_patch' },
-  { a: 'soda',   b: 'match', out: 'fizz_bomb' },
+  { a: 'match', b: 'soda', out: 'fizz_bomb' },
+  { a: 'knife', b: 'yoyo', out: 'bladed_yoyo' },
 ];
 
-export function craft(a: ItemId, b: ItemId): ItemId | null {
-  const r = RECIPES.find(r => (r.a === a && r.b === b) || (r.a === b && r.b === a));
-  return r ? r.out : null;
+const RECIPE_LOOKUP = RECIPES.reduce<Map<string, ItemId>>((acc, recipe) => {
+  const key = createKey(recipe.a, recipe.b);
+  acc.set(key, recipe.out);
+  return acc;
+}, new Map());
+
+function createKey(a: ItemId, b: ItemId) {
+  return [a, b].sort().join('::');
+}
+
+export function craft(a?: ItemId | null, b?: ItemId | null): ItemId | null {
+  if (!a || !b) return null;
+  const key = createKey(a, b);
+  return RECIPE_LOOKUP.get(key) ?? null;
 }
