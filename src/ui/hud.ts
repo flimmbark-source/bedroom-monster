@@ -9,6 +9,9 @@ export type HudElements = {
   slotTexts: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];
   slotIcons: [Phaser.GameObjects.Image, Phaser.GameObjects.Image];
   slotUseDots: [Phaser.GameObjects.Graphics, Phaser.GameObjects.Graphics];
+  shoveCooldown: Phaser.GameObjects.Graphics;
+  shoveKeyText: Phaser.GameObjects.Text;
+  shoveLabel: Phaser.GameObjects.Text;
 };
 
 export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
@@ -73,6 +76,7 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
       'Left Click: Use Slot 1',
       'Right Click: Use Slot 2',
       'E: Pick Up / Search',
+      'F: Shove',
       'G: Drop Item',
       'R: Craft',
     ].join('\n'),
@@ -87,11 +91,59 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
   controlsText.setScrollFactor(0);
   container.add(controlsText);
 
+  const shoveKeyText = scene.add.text(ROOM_W - 210, 152, 'F', {
+    fontFamily: 'monospace',
+    fontSize: '20px',
+    fontStyle: 'bold',
+    align: 'center',
+  });
+  shoveKeyText.setOrigin(0.5);
+  shoveKeyText.setScrollFactor(0);
+  container.add(shoveKeyText);
+
+  const shoveLabel = scene.add.text(ROOM_W - 184, 139, 'Shove', {
+    fontFamily: 'monospace',
+    fontSize: '12px',
+    align: 'left',
+  });
+  shoveLabel.setOrigin(0, 0);
+  shoveLabel.setLineSpacing(2);
+  shoveLabel.setScrollFactor(0);
+  container.add(shoveLabel);
+
+  const shoveCooldown = scene.add.graphics();
+  shoveCooldown.setScrollFactor(0);
+  container.addAt(shoveCooldown, container.getIndex(shoveKeyText));
+
   // initialize once so the HUD starts with correct values
   const initialInv: Inventory = [null, null];
-  drawHUD({ container, hearts, slotTexts, slotIcons, slotUseDots }, maxHp, maxHp, initialInv);
+  drawHUD(
+    {
+      container,
+      hearts,
+      slotTexts,
+      slotIcons,
+      slotUseDots,
+      shoveCooldown,
+      shoveKeyText,
+      shoveLabel,
+    },
+    maxHp,
+    maxHp,
+    initialInv,
+    0,
+  );
 
-  return { container, hearts, slotTexts, slotIcons, slotUseDots };
+  return {
+    container,
+    hearts,
+    slotTexts,
+    slotIcons,
+    slotUseDots,
+    shoveCooldown,
+    shoveKeyText,
+    shoveLabel,
+  };
 }
 
 function slotLabel(i: number, it: Item | null) {
@@ -99,8 +151,14 @@ function slotLabel(i: number, it: Item | null) {
   return `${i + 1}: ${it.label}`;
 }
 
-export function drawHUD(hud: HudElements, hp: number, maxHp: number, inv: Inventory) {
-  const { hearts, slotTexts, slotIcons, slotUseDots } = hud;
+export function drawHUD(
+  hud: HudElements,
+  hp: number,
+  maxHp: number,
+  inv: Inventory,
+  shoveCooldownProgress = 0,
+) {
+  const { hearts, slotTexts, slotIcons, slotUseDots, shoveCooldown, shoveKeyText, shoveLabel } = hud;
 
   hearts.clear();
   for (let i = 0; i < maxHp; i += 1) {
@@ -136,5 +194,31 @@ export function drawHUD(hud: HudElements, hp: number, maxHp: number, inv: Invent
     } else {
       slotIcons[i].setVisible(false);
     }
+  }
+
+  const clampedProgress = Math.max(0, Math.min(1, shoveCooldownProgress));
+  const radius = 20;
+  const centerX = shoveKeyText.x;
+  const centerY = shoveKeyText.y;
+  shoveCooldown.clear();
+  shoveCooldown.fillStyle(0x000000, 0.45);
+  shoveCooldown.fillCircle(centerX, centerY, radius);
+  shoveCooldown.lineStyle(1, 0xffffff, 0.35);
+  shoveCooldown.strokeCircle(centerX, centerY, radius);
+
+  if (clampedProgress > 0) {
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + Math.PI * 2 * clampedProgress;
+    shoveCooldown.beginPath();
+    shoveCooldown.fillStyle(0xfff275, 0.9);
+    shoveCooldown.slice(centerX, centerY, radius, startAngle, endAngle, false);
+    shoveCooldown.fillPath();
+    shoveKeyText.setAlpha(0.65);
+    shoveLabel.setAlpha(0.65);
+  } else {
+    shoveCooldown.lineStyle(2, 0x8cff9e, 0.9);
+    shoveCooldown.strokeCircle(centerX, centerY, radius - 3);
+    shoveKeyText.setAlpha(1);
+    shoveLabel.setAlpha(1);
   }
 }

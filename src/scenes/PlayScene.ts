@@ -61,7 +61,7 @@ export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   monster!: Monster;
   cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  keyPick!: Phaser.Input.Keyboard.Key; keyDrop!: Phaser.Input.Keyboard.Key; keyCraft!: Phaser.Input.Keyboard.Key;
+  keyPick!: Phaser.Input.Keyboard.Key; keyDrop!: Phaser.Input.Keyboard.Key; keyCraft!: Phaser.Input.Keyboard.Key; keyShove!: Phaser.Input.Keyboard.Key;
 
   hp = PLAYER_BASE.hp; inv: Inventory = [null, null];
   itemsGroup!: Phaser.Physics.Arcade.StaticGroup;
@@ -92,7 +92,10 @@ export class PlayScene extends Phaser.Scene {
   private playerSpeedBoostUntil = 0;
   private playerSpeedBoostMultiplier = 1;
   private playerKnockbackUntil = 0;
-  private readonly monsterFurnitureReleaseDelay = 60;
+  private playerShoveCooldownUntil = 0;
+  private readonly playerShoveCooldownDuration = 8000;
+  private readonly playerShoveRange = 96;
+  private readonly furnitureReleaseDelay = 60;
   constructor() { super('Play'); }
 
   preload() {
@@ -403,6 +406,7 @@ export class PlayScene extends Phaser.Scene {
     this.keyPick = this.input.keyboard!.addKey('E');
     this.keyDrop = this.input.keyboard!.addKey('G');
     this.keyCraft = this.input.keyboard!.addKey('R');
+    this.keyShove = this.input.keyboard!.addKey('F');
 
     this.input.mouse?.disableContextMenu();
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.updateAimFromPointer(pointer));
@@ -521,7 +525,7 @@ export class PlayScene extends Phaser.Scene {
     rect.setData('spriteRef', sprite ?? null);
     rect.setData('spriteOffsetX', spriteOffsetX);
     rect.setData('spriteOffsetY', spriteOffsetY);
-    rect.setData('lastMonsterContactAt', 0);
+    rect.setData('lastPushContactAt', 0);
 
     if (!options.searchable) return;
 
@@ -632,7 +636,7 @@ export class PlayScene extends Phaser.Scene {
     const monster = monsterObj as Monster;
     const monsterBody = monster.body as Phaser.Physics.Arcade.Body | undefined;
     if (!furnitureBody || !monsterBody) return;
-    rect.setData('lastMonsterContactAt', this.time.now);
+    rect.setData('lastPushContactAt', this.time.now);
     const isBeingPushed = this.applyFurniturePush(
       furnitureBody,
       monsterBody,
@@ -645,14 +649,87 @@ export class PlayScene extends Phaser.Scene {
     }
   }
 
-    private settleFurnitureAfterMonsterPush(currentTime: number) {
+  private tryShoveFurniture(now: number) {
+    if (now < this.playerShoveCooldownUntil) return false;
+    if (!this.furnitureGroup) return false;
+    const playerBody = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!playerBody) return false;
+
+    const direction = this.getPlayerFacingVector();
+    if (direction.lengthSq() === 0) return false;
+
+    const playerX = this.player.x;
+    const playerY = this.player.y;
+    const maxDistance = this.playerShoveRange;
+    const minAlignment = 0.35;
+
+    let targetRect: Phaser.GameObjects.Rectangle | null = null;
+    let targetBody: Phaser.Physics.Arcade.Body | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    this.furnitureGroup.children.each((child) => {
+      const rect = child as Phaser.GameObjects.Rectangle;
+      if (!rect.active) return;
+      const body = rect.body as Phaser.Physics.Arcade.Body | undefined;
+      if (!body) return;
+      const centerX = body.center?.x ?? body.position.x + body.halfWidth;
+      const centerY = body.center?.y ?? body.position.y + body.halfHeight;
+      const offsetX = centerX - playerX;
+      const offsetY = centerY - playerY;
+      const distance = Math.hypot(offsetX, offsetY);
+      if (distance === 0 || distance > maxDistance) return;
+      const alignment = (offsetX / distance) * direction.x + (offsetY / distance) * direction.y;
+      if (alignment < minAlignment) return;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        targetRect = rect;
+        targetBody = body;
+      }
+    });
+
+    if (!targetRect || !targetBody) return false;
+
+    const pushIntent = direction.clone().setLength(80);
+    const pushed = this.applyFurniturePush(targetBody, playerBody, 0.0016, pushIntent);
+    if (!pushed) return false;
+
+    targetRect.setData('lastPushContactAt', now);
+    this.playerShoveCooldownUntil = now + this.playerShoveCooldownDuration;
+    this.spawnFloatingEmoji(
+      targetRect.x,
+      targetRect.y - targetRect.height / 2 - 10,
+      '💥',
+      18,
+      0xfff275,
+      360,
+    );
+
+    return true;
+  }
+
+  private getPlayerFacingVector() {
+    switch (this.playerFacing) {
+      case 'up':
+        return new Phaser.Math.Vector2(0, -1);
+      case 'down':
+        return new Phaser.Math.Vector2(0, 1);
+      case 'left':
+        return new Phaser.Math.Vector2(-1, 0);
+      case 'right':
+        return new Phaser.Math.Vector2(1, 0);
+      default:
+        return new Phaser.Math.Vector2();
+    }
+  }
+
+  private settleFurnitureAfterPush(currentTime: number) {
     if (!this.furnitureGroup) return;
     this.furnitureGroup.children.each((child) => {
       const rect = child as Phaser.GameObjects.Rectangle;
       const body = rect.body as Phaser.Physics.Arcade.Body | undefined;
       if (!body) return;
-      const lastContact = (rect.getData('lastMonsterContactAt') as number) ?? 0;
-      if (currentTime - lastContact <= this.monsterFurnitureReleaseDelay) return;
+      const lastContact = (rect.getData('lastPushContactAt') as number) ?? 0;
+      if (currentTime - lastContact <= this.furnitureReleaseDelay) return;
       const velX = body.velocity.x;
       const velY = body.velocity.y;
       if (velX !== 0 || velY !== 0) {
@@ -1441,6 +1518,7 @@ export class PlayScene extends Phaser.Scene {
     this.playerSpeedBoostUntil = 0;
     this.playerSpeedBoostMultiplier = 1;
     this.playerKnockbackUntil = 0;
+    this.playerShoveCooldownUntil = 0;
     if (this.player?.body) {
       (this.player.body as Phaser.Physics.Arcade.Body).maxSpeed = 260;
     }
@@ -1966,8 +2044,11 @@ export class PlayScene extends Phaser.Scene {
       if (Phaser.Input.Keyboard.JustDown(this.keyDrop)) this.drop(0);
       if (Phaser.Input.Keyboard.JustDown(this.keyCraft)) this.craft();
     }
+    if (Phaser.Input.Keyboard.JustDown(this.keyShove)) {
+      this.tryShoveFurniture(now);
+    }
 
-    this.settleFurnitureAfterMonsterPush(now);
+    this.settleFurnitureAfterPush(now);
     this.updateFurnitureVisuals();
     this.updateSearch(delta);
 
@@ -1976,7 +2057,11 @@ export class PlayScene extends Phaser.Scene {
     this.resolveTelegraphCollisions();
 
     // HUD
-    drawHUD(this.hud, this.hp, PLAYER_BASE.hp, this.inv);
+    const shoveRemaining = Math.max(this.playerShoveCooldownUntil - now, 0);
+    const shoveProgress = this.playerShoveCooldownDuration > 0
+      ? shoveRemaining / this.playerShoveCooldownDuration
+      : 0;
+    drawHUD(this.hud, this.hp, PLAYER_BASE.hp, this.inv, shoveProgress);
     this.updateFurnitureIndicators();
   }
 
