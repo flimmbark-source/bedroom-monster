@@ -1,14 +1,4 @@
-export type ItemId =
-  | 'match' | 'knife' | 'soda' | 'bottle' | 'bandaid' | 'yoyo'
-  | 'fire_bottle' | 'bladed_yoyo' | 'glass_shiv' | 'smoke_patch' | 'adrenal_patch' | 'fizz_bomb';
-
-export type Item = {
-  id: ItemId;
-  label: string;
-  uses: number;
-  icon: string;
-  data?: Record<string, unknown>;
-};
+import type { Item } from './items';
 
 export type Inventory = [Item | null, Item | null];
 
