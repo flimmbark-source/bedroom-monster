@@ -1,30 +1,105 @@
 # Bedroom Monster (Proto)
-Top-down survival prototype built with Phaser + TypeScript. **GitHub-only workflow**: CI builds and deploys to GitHub Pages on every push to `main`.
 
-## Current status
-- **Playable dorm-room encounter.** A single `PlayScene` sets up the bedroom, populates furniture hitboxes, spawns the player with WASD + mouse controls, and brings in the monster with full collision + telegraphed overlap handling. Starter loot is seeded on the floor and a timed restock loop keeps supplies coming. 
-- **Search → loot loop.** Pushable/searchable furniture highlights when approached, kicks off a timed search minigame with checkpoint loot rolls, and awards items directly into the two-slot inventory while a HUD search bar tracks progress. Searches end early if the bag fills.
-- **Combat + item verbs.** Each inventory item has a concrete combat effect—knife arcs, yoyo rings, bottle throws, buffs, etc.—and consumption updates the HUD. Crafting combines the two slots into upgraded recipes like fire bottles or adrenal patches.
-- **Telegraphed monster AI.** The monster class manages attack priorities, rage scaling, hitboxes, and telegraph shapes that damage, slow, or knock back the player when collisions resolve.
-- **UI polish.** The HUD renders hearts, item slots with use pips, and an always-visible control reference for the current bindings.
+A top-down dorm-survival prototype built with Phaser + TypeScript. The playable build lives in a single `PlayScene` that lays out the room, seeds loot, drives the monster encounter, and renders the HUD. Every push to `main` is built by GitHub Actions and deployed to GitHub Pages.
 
-## Play it
-Enable GitHub Pages → Source: **GitHub Actions**. The Actions workflow in `.github/workflows/deploy.yml` deploys `dist/`.
+---
 
-## Scripts
+## Quick start
+
 - Requires **Node.js ≥18**.
-- `npm run dev` – local dev (optional if using Codespaces)
-- `npm run build` – build to `dist/`
-- `npm run preview` – serve the build locally
+- `npm install`
+- `npm run dev` – local development server
+- `npm run build` – production build to `dist/`
+- `npm run preview` – preview the production build locally
 
-> ℹ️ **Do not open `index.html` directly in the browser.** Browsers cannot execute the TypeScript entry (`src/main.ts`) referenced by the page, so nothing will render.
-> Always run through Vite via `npm run dev` (or `npm run build`/`npm run preview`) so the TypeScript is compiled before loading.
+> ℹ️ **Do not open `index.html` directly in the browser.** Browsers cannot execute the TypeScript entry (`src/main.ts`) referenced by the page, so nothing will render. Always use the Vite scripts above so the TypeScript compiles before loading.
+
+---
+
+## Gameplay overview
+
+1. **Gear up.** Search the suite, grab starter loot, and restock from supply drops that periodically spawn on the floor.
+2. **Manage the bag.** Two inventory slots hold anything you pick up. Items can be used directly or combined into higher-tier recipes.
+3. **Survive the monster.** Dodge attack telegraphs, leverage consumables, and exploit rage windows while keeping your health hearts filled.
+
+The goal is to survive as long as possible against the escalating monster while keeping the dorm supplied.
+
+---
+
+## Systems & features
+
+### Room layout & interaction space
+- `PlayScene` defines the 1280×720 room bounds and populates furniture sprites + physics blockers so the player and monster share tight navigation lanes.
+- Every searchable prop stores metadata (name, search time, checkpoints, loot table, emoji label) so interactions feel bespoke even though they share code paths.
+
+### Search → loot loop
+- Furniture search kicks off a timed progress bar with mid-search loot rolls; checkpoints award items immediately if inventory space exists.
+- Highlight outlines, emoji callouts, and label offsets help communicate which piece you are working on.
+
+### Inventory, items, and verbs
+- Two-slot inventory lives on the player entity and is mirrored in the HUD; picking up items auto-sorts into the first open slot.
+- `BASE_ITEMS` defines all usable verbs (knife arcs, bottles, soda buffs, etc.) with icon bindings for the HUD.
+- Item consumption mutates the slot, decrements uses, and triggers bespoke effects like heals, speed boosts, thrown projectiles, or on-hit DOTs.
+
+### Crafting recipes
+- Combining the two inventory slots via `R` runs the crafting table and replaces slot 1 with the recipe output on success.
+- Recipes cover offensive upgrades (fire bottles, bladed yoyos) and utility (adrenal/smoke patches) to keep the loop evolving.
+
+### Monster AI & telegraphs
+- The monster sprite manages its own HP, rage state, attack cooldowns, and animation facing while roaming toward the player.
+- Each attack spins up a multi-phase telegraph (pre-warn, wind-up, commit, recovery) with geometry queries to register player hits, knockback, slows, or screen shake.
+- Rage mode accelerates timings and movement, updating the HP bar overlay and pushing the player to adapt mid-fight.
+
+### Player status & combat resolution
+- Player stats (HP, i-frames, slows, knockback, temporary speed buffs) are tracked on the scene and updated each tick based on collisions and item usage.
+- Monster hitboxes call into shared damage handlers that respect invulnerability windows and feed the HUD heart renderer.
+
+### Restock loop & drops
+- Ground restock points periodically spawn random gear from the shared pool whenever fewer than four loose items remain in the room.
+- Items can also be tossed back to the floor, where they persist as labeled sprites and can be reclaimed later.
+
+### HUD & player-facing feedback
+- `ui/hud.ts` builds a fixed-depth overlay with hearts, slot labels, remaining-use pips, and an always-on control reference.
+- `drawHUD` syncs the UI each frame to reflect HP changes, inventory swaps, and remaining uses per slot.
+
+---
+
+## Content reference
+
+- **Items:** Defined in `src/game/items.ts` with icon keys, labels, default uses, and per-item data payloads.
+- **Recipes:** Declared in `src/game/recipes.ts` and consumed via the crafting helper.
+- **Monster:** Implemented in `src/game/monster.ts`, exposing attack telegraph hooks and rage behavior used by the scene.
+- **Assets:** Sprite sheets and atlases live under `public/assets/sprites/` and are loaded in `PlayScene.preload`.
+
+---
+
+## Project structure
+
+```
+src/
+  main.ts          # Bootstraps Phaser
+  scenes/PlayScene # Core gameplay loop (room, player, monster, loot)
+  game/            # Config, item data, monster class, crafting recipes
+  ui/hud.ts        # HUD creation + rendering helpers
+public/assets/     # Background, furniture, character, and item art
+```
+
+---
 
 ## Controls
-- Move: WASD (mouse aim)
-- Interact: `E` (pickup/search), `G` (drop active slot)
-- Use: Left Click (slot 1), Right Click (slot 2)
-- Craft: `R` (combine slots → result in slot 1)
 
-## Roadmap
-See Issues and Milestones for upcoming beats.
+| Action            | Input           |
+| ----------------- | --------------- |
+| Move              | WASD (mouse aim) |
+| Use item slot 1   | Left mouse       |
+| Use item slot 2   | Right mouse      |
+| Interact / Search | `E`              |
+| Drop item         | `G`              |
+| Craft combine     | `R`              |
+
+---
+
+## Deployment
+
+Enable GitHub Pages → Source: **GitHub Actions**. The workflow in `.github/workflows/deploy.yml` builds and deploys the latest `dist/` output on every push to `main`.
+
