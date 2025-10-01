@@ -162,9 +162,9 @@ export class PlayScene extends Phaser.Scene {
         offsetY: 0,
       },
     });
-    this.addFurnitureBlock(furniture, 330, 520, {
+    this.addFurnitureBlock(furniture, 640, 200, {
       searchable: true,
-      name: 'Left Lower Bed',
+      name: 'Middle Upper Bed',
       searchDuration: 2600,
       checkPoints: [0.85, 0.55, 0.25],
       findChance: 0.5,
