@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "tile": 128,
+    "image": "doors_windows_sheet.png"
+  },
+  "frames": {
+    "door_bedroom": {
+      "x": 0,
+      "y": 0,
+      "w": 128,
+      "h": 128
+    },
+    "door_hall": {
+      "x": 128,
+      "y": 0,
+      "w": 128,
+      "h": 128
+    },
+    "door_infirmary": {
+      "x": 256,
+      "y": 0,
+      "w": 128,
+      "h": 128
+    },
+    "door_office": {
+      "x": 384,
+      "y": 0,
+      "w": 128,
+      "h": 128
+    },
+    "door_kitchen": {
+      "x": 512,
+      "y": 0,
+      "w": 128,
+      "h": 128
+    },
+    "door_entrance": {
+      "x": 640,
+      "y": 0,
+      "w": 128,
+      "h": 128
+    },
+    "archway": {
+      "x": 768,
+      "y": 0,
+      "w": 128,
+      "h": 128
+    },
+    "window_small": {
+      "x": 0,
+      "y": 128,
+      "w": 128,
+      "h": 128
+    },
+    "window_wide": {
+      "x": 128,
+      "y": 128,
+      "w": 128,
+      "h": 128
+    }
+  }
+}
