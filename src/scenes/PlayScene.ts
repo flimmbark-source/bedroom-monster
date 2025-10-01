@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MONSTER_SPRITES } from '@content/monsterSprites';
 import { PLAYER_BASE } from '@game/config';
 import { ITEM_ICON_SOURCES, type Item } from '@game/items';
 import { DoorSystem, resetDoors } from '@game/doors';
@@ -74,9 +75,16 @@ export class PlayScene extends Phaser.Scene {
       frameWidth: 102,
       frameHeight: 152,
     });
-    this.load.spritesheet('monster', 'assets/sprites/monster.png', {
-      frameWidth: 184,
-      frameHeight: 275,
+    const monsterSpriteConfigs = new Map(
+      Object.values(MONSTER_SPRITES).map((sprite) => [sprite.textureKey, sprite]),
+    );
+    monsterSpriteConfigs.forEach((sprite) => {
+      this.load.spritesheet(sprite.textureKey, sprite.texturePath, {
+        frameWidth: sprite.frame.width,
+        frameHeight: sprite.frame.height,
+        margin: sprite.frame.margin ?? 0,
+        spacing: sprite.frame.spacing ?? 0,
+      });
     });
 
     this.load.atlasJSONHash('furniture', 'assets/furniture_sheet.png', 'assets/furniture_atlas.json');
@@ -911,26 +919,28 @@ export class PlayScene extends Phaser.Scene {
       });
     });
 
-    const monsterDirections: Record<'up' | 'down' | 'left' | 'right', number> = {
-      down: 0,
-      left: 2,
-      right: 1,
-      up: 3,
-    };
+    Object.values(MONSTER_SPRITES).forEach((sprite) => {
+      const { keyPrefix, framesPerDirection, directions } = sprite.animations;
+      const idleFrameRate = sprite.frameRates?.idle ?? 1;
+      const walkFrameRate = sprite.frameRates?.walk ?? 7;
 
-    Object.entries(monsterDirections).forEach(([dir, row]) => {
-      const base = row * 4;
-      ensureAnimation(`monster-idle-${dir}`, {
-        key: `monster-idle-${dir}`,
-        frames: [{ key: 'monster', frame: base }],
-        frameRate: 1,
-        repeat: -1,
-      });
-      ensureAnimation(`monster-walk-${dir}`, {
-        key: `monster-walk-${dir}`,
-        frames: this.anims.generateFrameNumbers('monster', { start: base, end: base + 3 }),
-        frameRate: 7,
-        repeat: -1,
+      Object.entries(directions).forEach(([dir, row]) => {
+        const base = row * framesPerDirection;
+        ensureAnimation(`${keyPrefix}-idle-${dir}`, {
+          key: `${keyPrefix}-idle-${dir}`,
+          frames: [{ key: sprite.textureKey, frame: base }],
+          frameRate: idleFrameRate,
+          repeat: -1,
+        });
+        ensureAnimation(`${keyPrefix}-walk-${dir}`, {
+          key: `${keyPrefix}-walk-${dir}`,
+          frames: this.anims.generateFrameNumbers(sprite.textureKey, {
+            start: base,
+            end: base + framesPerDirection - 1,
+          }),
+          frameRate: walkFrameRate,
+          repeat: -1,
+        });
       });
     });
   }
