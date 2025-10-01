@@ -65,6 +65,7 @@ const RESTOCK_POINTS = [
   { x: 880, y: 560 },
 ];
 
+
 type ItemPoolConfig = RoomConfig['itemPool'];
 
 const ROOM_ITEM_POOLS: Record<RoomId, ItemPoolConfig> = {
@@ -138,6 +139,7 @@ const ROOM_ITEM_POOLS: Record<RoomId, ItemPoolConfig> = {
     ],
   },
 };
+
 
 const ROOM_MONSTER_POOLS: Record<RoomId, Weighted<MonsterId>[]> = {
   bedroom: [['brine_walker', 1]],

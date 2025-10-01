@@ -174,7 +174,7 @@ export class SearchSystem {
         rect,
         searchDuration: options.searchDuration ?? 2400,
         checkPoints: options.checkPoints ?? [0.5],
-        lootTable: options.lootTable ?? ['bandaid', 'bottle', 'match'],
+        lootTable: options.lootTable ?? ['tape_roll', 'cooking_oil', 'flare'],
         findChance: options.findChance ?? 0.4,
         emoji: options.emoji ?? this.getFurnitureEmoji(options.name ?? ''),
         emojiLabel: this.scene.add

@@ -1,21 +1,17 @@
 export type ItemIcon = { key: string; frame?: number };
 
 export type ItemId =
-  | 'match'
-  | 'knife'
-  | 'soda'
-  | 'bottle'
-  | 'bandaid'
-  | 'yoyo'
-  | 'tacks'
-  | 'flashlight'
-  | 'sterile_wrap'
-  | 'fire_bottle'
-  | 'bladed_yoyo'
-  | 'glass_shiv'
-  | 'smoke_patch'
-  | 'adrenal_patch'
-  | 'fizz_bomb';
+  | 'flare'
+  | 'stapler'
+  | 'saline'
+  | 'cooking_oil'
+  | 'tape_roll'
+  | 'dust_pillow'
+  | 'salt'
+  | 'ledger_spike'
+  | 'ink_smoke'
+  | 'brined_salt'
+  | 'ledger_bomb';
 
 export type ItemDef = {
   id: ItemId;
@@ -43,109 +39,81 @@ export const ITEM_ICON_SOURCES: Record<
 };
 
 export const ITEMS: Record<ItemId, ItemDef> = {
-  match: {
-    id: 'match',
-    label: 'Match',
+  flare: {
+    id: 'flare',
+    label: 'Flare',
     uses: 2,
     verb: 'ignite',
     icon: { key: 'item-matches' },
   },
-  knife: {
-    id: 'knife',
-    label: 'Pocket Knife',
+  stapler: {
+    id: 'stapler',
+    label: 'Stapler',
     uses: 5,
     verb: 'slash',
     icon: { key: 'item-knife' },
   },
-  soda: {
-    id: 'soda',
-    label: 'Soda',
+  saline: {
+    id: 'saline',
+    label: 'Saline',
     uses: 2,
     verb: 'drink',
     icon: { key: 'item-soda' },
   },
-  bottle: {
-    id: 'bottle',
-    label: 'Empty Bottle',
+  cooking_oil: {
+    id: 'cooking_oil',
+    label: 'Cooking Oil',
     uses: 1,
     verb: 'throw',
     icon: { key: 'item-empty-bottle' },
   },
-  bandaid: {
-    id: 'bandaid',
-    label: 'Bandaid',
+  tape_roll: {
+    id: 'tape_roll',
+    label: 'Tape Roll',
     uses: 1,
     verb: 'heal',
     icon: { key: 'item-bandaid' },
   },
-  yoyo: {
-    id: 'yoyo',
-    label: 'Yoyo',
+  dust_pillow: {
+    id: 'dust_pillow',
+    label: 'Dust Pillow',
     uses: 3,
     verb: 'swing',
     icon: { key: 'item-yoyo' },
   },
-  tacks: {
-    id: 'tacks',
-    label: 'Thumb Tacks',
-    uses: 3,
-    verb: 'scatter',
+  salt: {
+    id: 'salt',
+    label: 'Salt',
+    uses: 1,
+    verb: 'detonate',
     icon: { key: 'items', frame: 0 },
   },
-  flashlight: {
-    id: 'flashlight',
-    label: 'Flashlight',
-    uses: 4,
-    verb: 'shine',
-    icon: { key: 'items', frame: 1 },
-  },
-  sterile_wrap: {
-    id: 'sterile_wrap',
-    label: 'Sterile Wrap',
-    uses: 1,
-    verb: 'wrap',
-    icon: { key: 'items', frame: 2 },
-  },
-  fire_bottle: {
-    id: 'fire_bottle',
-    label: 'Fire Bottle',
-    uses: 1,
-    verb: 'hurl',
-    icon: { key: 'item-soda' },
-  },
-  bladed_yoyo: {
-    id: 'bladed_yoyo',
-    label: 'Bladed Yoyo',
-    uses: 3,
-    verb: 'reap',
-    icon: { key: 'item-yoyo' },
-  },
-  glass_shiv: {
-    id: 'glass_shiv',
-    label: 'Glass Shiv',
+  ledger_spike: {
+    id: 'ledger_spike',
+    label: 'Ledger Spike',
     uses: 2,
     verb: 'stab',
-    icon: { key: 'item-knife' },
+    icon: { key: 'items', frame: 1 },
   },
-  smoke_patch: {
-    id: 'smoke_patch',
-    label: 'Smoke Patch',
+  ink_smoke: {
+    id: 'ink_smoke',
+    label: 'Ink Smoke',
     uses: 1,
     verb: 'mask',
-    icon: { key: 'item-bandaid' },
+    icon: { key: 'items', frame: 2 },
   },
-  adrenal_patch: {
-    id: 'adrenal_patch',
-    label: 'Adrenal Patch',
+  brined_salt: {
+    id: 'brined_salt',
+    label: 'Brined Salt',
     uses: 1,
     verb: 'boost',
     icon: { key: 'item-bandaid' },
   },
-  fizz_bomb: {
-    id: 'fizz_bomb',
-    label: 'Fizz Pop Bomb',
+  ledger_bomb: {
+    id: 'ledger_bomb',
+    label: 'Ledger Bomb',
     uses: 1,
-    verb: 'detonate',
+    verb: 'hurl',
     icon: { key: 'item-soda' },
   },
 };

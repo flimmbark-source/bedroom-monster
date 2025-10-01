@@ -315,7 +315,7 @@ export class PlayScene extends Phaser.Scene {
       case 'drink':
         this.speedBoost(3000);
         this.telegraphSystem.showSelfBuffTelegraph('🥤', 0x9de4ff, 420);
-        this.afterDelay(3000, () => this.gainBottle(slot));
+        this.afterDelay(3000, () => this.gainSalt(slot));
         return true;
       case 'hurl':
         this.throwBottle(3, true);
@@ -419,8 +419,8 @@ export class PlayScene extends Phaser.Scene {
     }
   }
 
-  private gainBottle(slot: 0 | 1) {
-    this.inventorySystem.gainBottle(slot, this.player.x + 8, this.player.y + 8);
+  private gainSalt(slot: 0 | 1) {
+    this.inventorySystem.gainSalt(slot, this.player.x + 8, this.player.y + 8);
   }
 
   damagePlayer(
