@@ -72,9 +72,9 @@ export class PlayScene extends Phaser.Scene {
     { x: 400, y: 360 },
     { x: 640, y: 360 },
     { x: 880, y: 360 },
-    { x: 400, y: 700 },
-    { x: 640, y: 700 },
-    { x: 880, y: 700 },
+    { x: 400, y: 560 },
+    { x: 640, y: 560 },
+    { x: 880, y: 560 },
   ];
   private restockPool: Item['id'][] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
   private furniture: SearchableFurniture[] = [];
