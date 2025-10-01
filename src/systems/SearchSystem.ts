@@ -6,6 +6,7 @@ import { InventorySystem } from './InventorySystem';
 
 export type FurnitureSpriteOptions = {
   frame: string;
+  textureKey?: string;
   offsetX?: number;
   offsetY?: number;
   depth?: number;
@@ -158,6 +159,7 @@ export class SearchSystem {
     if (spriteOptions) {
       const {
         frame,
+        textureKey = 'furniture',
         offsetX: spriteOffsetXValue = 0,
         offsetY: spriteOffsetYValue = 0,
         depth = 3,
@@ -167,7 +169,7 @@ export class SearchSystem {
         flipX = false,
         flipY = false,
       } = spriteOptions;
-      sprite = this.scene.add.image(x + spriteOffsetXValue, y + spriteOffsetYValue, 'furniture', frame);
+      sprite = this.scene.add.image(x + spriteOffsetXValue, y + spriteOffsetYValue, textureKey, frame);
       sprite.setOrigin(0.5, 0.5);
       sprite.setDepth(depth);
       sprite.setFlip(flipX, flipY);
@@ -518,7 +520,8 @@ export class SearchSystem {
     hitbox: FurnitureHitboxOptions | undefined,
   ) {
     const { scaleX, scaleY } = this.getFurnitureScale(spriteOptions);
-    const texture = spriteOptions?.frame ? this.scene.textures.get('furniture') : null;
+    const textureKey = spriteOptions?.textureKey ?? 'furniture';
+    const texture = spriteOptions?.frame ? this.scene.textures.get(textureKey) : null;
     const frame =
       spriteOptions?.frame && texture?.has(spriteOptions.frame)
         ? texture.get(spriteOptions.frame)
