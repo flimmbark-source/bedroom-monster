@@ -11,6 +11,12 @@ export type SpawnPacing = {
   restockInitialDelayMs?: number;
 };
 
+export type RoomSpawns = {
+  restock: SpawnPacing;
+  items: Weighted<ItemId>[];
+  monsters: Weighted<MonsterId>[];
+};
+
 export type RoomConfig = {
   id: RoomId;
   size: { width: number; height: number };
@@ -18,9 +24,7 @@ export type RoomConfig = {
   furniture: FurnitureLayoutEntry[];
   restockPoints: { x: number; y: number }[];
   starterItems: ItemId[];
-  restockPool: Weighted<ItemId>[];
-  monsterWeights: Weighted<MonsterId>[];
-  spawnPacing: SpawnPacing;
+  spawns: RoomSpawns;
   keyDrops: Weighted<ItemId>[];
 };
 
@@ -676,9 +680,11 @@ export const ROOMS: Record<RoomId, RoomConfig> = {
     furniture: HALLWAY_FURNITURE,
     restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
     starterItems: [...STARTER_ITEMS],
-    restockPool: RESTOCK_POOL.map((entry) => ({ ...entry })),
-    monsterWeights: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
-    spawnPacing: { ...SPAWN_PACING },
+    spawns: {
+      restock: { ...SPAWN_PACING },
+      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
+      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    },
     keyDrops: [...EMPTY_KEY_DROPS],
   },
   infirmary: {
@@ -688,9 +694,11 @@ export const ROOMS: Record<RoomId, RoomConfig> = {
     furniture: INFIRMARY_FURNITURE,
     restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
     starterItems: [...STARTER_ITEMS],
-    restockPool: RESTOCK_POOL.map((entry) => ({ ...entry })),
-    monsterWeights: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
-    spawnPacing: { ...SPAWN_PACING },
+    spawns: {
+      restock: { ...SPAWN_PACING },
+      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
+      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    },
     keyDrops: [...EMPTY_KEY_DROPS],
   },
   office: {
@@ -700,9 +708,11 @@ export const ROOMS: Record<RoomId, RoomConfig> = {
     furniture: OFFICE_FURNITURE,
     restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
     starterItems: [...STARTER_ITEMS],
-    restockPool: RESTOCK_POOL.map((entry) => ({ ...entry })),
-    monsterWeights: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
-    spawnPacing: { ...SPAWN_PACING },
+    spawns: {
+      restock: { ...SPAWN_PACING },
+      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
+      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    },
     keyDrops: [...EMPTY_KEY_DROPS],
   },
   kitchen: {
@@ -712,9 +722,11 @@ export const ROOMS: Record<RoomId, RoomConfig> = {
     furniture: KITCHEN_FURNITURE,
     restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
     starterItems: [...STARTER_ITEMS],
-    restockPool: RESTOCK_POOL.map((entry) => ({ ...entry })),
-    monsterWeights: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
-    spawnPacing: { ...SPAWN_PACING },
+    spawns: {
+      restock: { ...SPAWN_PACING },
+      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
+      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    },
     keyDrops: [...EMPTY_KEY_DROPS],
   },
   entrance: {
@@ -724,9 +736,11 @@ export const ROOMS: Record<RoomId, RoomConfig> = {
     furniture: ENTRANCE_FURNITURE,
     restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
     starterItems: [...STARTER_ITEMS],
-    restockPool: RESTOCK_POOL.map((entry) => ({ ...entry })),
-    monsterWeights: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
-    spawnPacing: { ...SPAWN_PACING },
+    spawns: {
+      restock: { ...SPAWN_PACING },
+      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
+      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    },
     keyDrops: [...EMPTY_KEY_DROPS],
   },
 };

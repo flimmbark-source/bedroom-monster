@@ -196,6 +196,16 @@ export class SearchSystem {
     layout.forEach(({ x, y, options }) => this.addFurnitureBlock(x, y, options));
   }
 
+  clearFurniture() {
+    this.furnitureGroup.clear(true, true);
+    this.furniture.forEach((entry) => {
+      if (entry.emojiLabel.active) {
+        entry.emojiLabel.destroy();
+      }
+    });
+    this.furniture = [];
+  }
+
   handlePlayerFurnitureCollision = (
     playerObj: Phaser.GameObjects.GameObject,
     furnitureObj: Phaser.GameObjects.GameObject,

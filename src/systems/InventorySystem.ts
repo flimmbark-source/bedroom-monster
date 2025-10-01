@@ -69,6 +69,10 @@ export class InventorySystem {
     this.createGroundItem(x, y, item.id);
   }
 
+  clearGroundItems() {
+    this.itemsGroup.clear(true, true);
+  }
+
   gainBottle(slot: 0 | 1, x: number, y: number) {
     if (!this.inventory[slot]) {
       this.inventory[slot] = cloneItem('bottle');
