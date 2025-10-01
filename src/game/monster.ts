@@ -333,8 +333,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     return this.hitboxDefs.map((def) => {
       const width = def.width * scaleX;
       const height = def.height * scaleY;
-      const x = this.x + def.offsetX * this.scaleX;
-      const y = this.y + def.offsetY * this.scaleY;
+      const x = this.x + def.offsetX * this.scaleX / 6;
+      const y = this.y + def.offsetY * this.scaleY / 6;
       const rect = new Phaser.Geom.Rectangle(x - width / 2, y - height / 2, width, height);
       return {
         ...def,
