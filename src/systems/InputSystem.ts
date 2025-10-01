@@ -7,6 +7,7 @@ export type InputCallbacks = {
   onDrop: (slot: 0 | 1) => void;
   onCraft: () => void;
   onSearchInterrupted: () => void;
+  onShove: () => void;
 };
 
 export type InputUpdateOptions = {
@@ -26,6 +27,7 @@ export class InputSystem {
   private keyPick!: Phaser.Input.Keyboard.Key;
   private keyDrop!: Phaser.Input.Keyboard.Key;
   private keyCraft!: Phaser.Input.Keyboard.Key;
+  private keyShove!: Phaser.Input.Keyboard.Key;
 
   private aimAngle = -Math.PI / 2;
   private facing: 'up' | 'down' | 'left' | 'right' = 'down';
@@ -46,6 +48,7 @@ export class InputSystem {
     this.keyPick = this.scene.input.keyboard!.addKey('E');
     this.keyDrop = this.scene.input.keyboard!.addKey('G');
     this.keyCraft = this.scene.input.keyboard!.addKey('R');
+    this.keyShove = this.scene.input.keyboard!.addKey('F');
 
     this.scene.input.mouse?.disableContextMenu();
     this.scene.input.on('pointermove', this.handlePointerMove);
@@ -129,6 +132,9 @@ export class InputSystem {
       if (Phaser.Input.Keyboard.JustDown(this.keyCraft)) {
         this.callbacks.onCraft();
       }
+      if (Phaser.Input.Keyboard.JustDown(this.keyShove)) {
+        this.callbacks.onShove();
+      }
     }
 
     return {
@@ -157,5 +163,9 @@ export class InputSystem {
     if (!Number.isNaN(angle)) {
       this.aimAngle = angle;
     }
+  }
+
+  getFacing() {
+    return this.facing;
   }
 }

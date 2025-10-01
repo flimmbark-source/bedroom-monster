@@ -203,7 +203,11 @@ export class SearchSystem {
     const furnitureBody = (furnitureObj.body as Phaser.Physics.Arcade.Body) ?? null;
     const playerBody = (playerObj.body as Phaser.Physics.Arcade.Body) ?? null;
     if (!furnitureBody || !playerBody) return;
-    furnitureBody.setVelocity(0, 0);
+    const now = this.scene.time.now;
+    const shoveActiveUntil = (furnitureObj.getData('playerShoveActiveUntil') as number) ?? 0;
+    if (now >= shoveActiveUntil) {
+      furnitureBody.setVelocity(0, 0);
+    }
 
     const prevPlayerX = playerBody.prev?.x ?? playerBody.position.x;
     const prevPlayerY = playerBody.prev?.y ?? playerBody.position.y;
@@ -232,12 +236,71 @@ export class SearchSystem {
     }
   };
 
+  tryPlayerShove(
+    player: Phaser.Physics.Arcade.Sprite,
+    facing: 'up' | 'down' | 'left' | 'right',
+    currentTime: number,
+  ) {
+    const playerBody = player.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!playerBody) return false;
+
+    const facingVector = this.getFacingVector(facing);
+    if (facingVector.lengthSq() === 0) return false;
+
+    const detectionDistance = 96;
+    const detectionDistanceSq = detectionDistance * detectionDistance;
+    let targetRect: Phaser.GameObjects.Rectangle | null = null;
+    let bestScore = -Infinity;
+
+    this.furnitureGroup.children.each((child) => {
+      const rect = child as Phaser.GameObjects.Rectangle;
+      if (!rect.active) return;
+      const furnitureBody = rect.body as Phaser.Physics.Arcade.Body | undefined;
+      if (!furnitureBody) return;
+
+      const dx = rect.x - player.x;
+      const dy = rect.y - player.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > detectionDistanceSq) return;
+
+      const direction = new Phaser.Math.Vector2(dx, dy);
+      if (direction.lengthSq() === 0) return;
+      direction.normalize();
+
+      const alignment = Phaser.Math.Clamp(direction.dot(facingVector), -1, 1);
+      if (alignment <= 0.2) return;
+
+      const dist = Math.sqrt(distSq);
+      const normalizedDistance = dist / detectionDistance;
+      const score = alignment * 2 - normalizedDistance;
+      if (score > bestScore) {
+        bestScore = score;
+        targetRect = rect;
+      }
+    });
+
+    if (!targetRect) return false;
+
+    const targetBody = targetRect.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!targetBody) return false;
+
+    const fallbackIntent = facingVector.clone().setLength(140);
+    const applied = this.applyFurniturePush(targetBody, playerBody, 0.06, fallbackIntent);
+    if (!applied) return false;
+
+    targetRect.setData('playerShoveActiveUntil', currentTime + 260);
+
+    return true;
+  }
+
   settleFurnitureAfterMonsterPush(currentTime: number) {
     this.furnitureGroup.children.each((child) => {
       const rect = child as Phaser.GameObjects.Rectangle;
       const body = rect.body as Phaser.Physics.Arcade.Body | undefined;
       if (!body) return;
       const lastContact = (rect.getData('lastMonsterContactAt') as number) ?? 0;
+      const shoveActiveUntil = (rect.getData('playerShoveActiveUntil') as number) ?? 0;
+      if (currentTime < shoveActiveUntil) return;
       if (currentTime - lastContact <= this.monsterFurnitureReleaseDelay) return;
       const velX = body.velocity.x;
       const velY = body.velocity.y;
@@ -538,6 +601,20 @@ export class SearchSystem {
     );
 
     return { scaleX, scaleY };
+  }
+
+  private getFacingVector(direction: 'up' | 'down' | 'left' | 'right') {
+    switch (direction) {
+      case 'up':
+        return new Phaser.Math.Vector2(0, -1);
+      case 'down':
+        return new Phaser.Math.Vector2(0, 1);
+      case 'left':
+        return new Phaser.Math.Vector2(-1, 0);
+      case 'right':
+      default:
+        return new Phaser.Math.Vector2(1, 0);
+    }
   }
 
   private getFurnitureEmoji(name: string) {

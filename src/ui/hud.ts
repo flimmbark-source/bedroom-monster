@@ -3,12 +3,28 @@ import { ROOM_W } from '@game/config';
 import { ITEM_TEXTURE_KEYS } from '@game/items';
 import type { Inventory, Item } from '@game/types';
 
+export type HudShoveIndicator = {
+  base: Phaser.GameObjects.Graphics;
+  progress: Phaser.GameObjects.Graphics;
+  label: Phaser.GameObjects.Text;
+  center: { x: number; y: number };
+  radius: number;
+};
+
 export type HudElements = {
   container: Phaser.GameObjects.Container;
   hearts: Phaser.GameObjects.Graphics;
   slotTexts: [Phaser.GameObjects.Text, Phaser.GameObjects.Text];
   slotIcons: [Phaser.GameObjects.Image, Phaser.GameObjects.Image];
   slotUseDots: [Phaser.GameObjects.Graphics, Phaser.GameObjects.Graphics];
+  shoveIndicator: HudShoveIndicator;
+};
+
+export type HudUpdateOptions = {
+  shoveCooldown?: {
+    remainingMs: number;
+    durationMs: number;
+  };
 };
 
 export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
@@ -63,35 +79,81 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
   const slotTexts: HudElements['slotTexts'] = [slotElements[0].text, slotElements[1].text];
   const slotUseDots: HudElements['slotUseDots'] = [slotElements[0].uses, slotElements[1].uses];
 
-  const controlsText = scene.add.text(
-    ROOM_W - 24,
-    24,
-    [
-      'Controls',
-      'WASD: Move',
-      'Mouse: Aim',
-      'Left Click: Use Slot 1',
-      'Right Click: Use Slot 2',
-      'E: Pick Up / Search',
-      'G: Drop Item',
-      'R: Craft',
-    ].join('\n'),
-    {
+  const controlLines = [
+    'Controls',
+    'WASD: Move',
+    'Mouse: Aim',
+    'Left Click: Use Slot 1',
+    'Right Click: Use Slot 2',
+    'E: Pick Up / Search',
+    'G: Drop Item',
+    'R: Craft',
+  ];
+
+  const controlTextStyle: Phaser.Types.GameObjects.Text.TextStyle = {
+    fontFamily: 'monospace',
+    fontSize: '12px',
+    align: 'right',
+  };
+
+  const lineHeight = 16;
+  controlLines.forEach((line, index) => {
+    const text = scene
+      .add.text(ROOM_W - 24, 24 + index * lineHeight, line, controlTextStyle)
+      .setOrigin(1, 0);
+    text.setScrollFactor(0);
+    text.setLineSpacing(4);
+    container.add(text);
+  });
+
+  const shoveText = scene
+    .add.text(ROOM_W - 24, 24 + controlLines.length * lineHeight, 'Shove', controlTextStyle)
+    .setOrigin(1, 0);
+  shoveText.setScrollFactor(0);
+  container.add(shoveText);
+
+  const shoveRadius = 12;
+  const shoveCenter = {
+    x: shoveText.x - shoveText.displayWidth - shoveRadius - 8,
+    y: shoveText.y + shoveText.displayHeight / 2,
+  };
+
+  const shoveBase = scene.add.graphics();
+  shoveBase.setScrollFactor(0);
+  container.add(shoveBase);
+
+  const shoveProgress = scene.add.graphics();
+  shoveProgress.setScrollFactor(0);
+  container.add(shoveProgress);
+
+  const shoveLabel = scene
+    .add.text(shoveCenter.x, shoveCenter.y, 'F', {
       fontFamily: 'monospace',
       fontSize: '12px',
-      align: 'right',
-    },
-  );
-  controlsText.setOrigin(1, 0);
-  controlsText.setLineSpacing(4);
-  controlsText.setScrollFactor(0);
-  container.add(controlsText);
+      align: 'center',
+    })
+    .setOrigin(0.5);
+  shoveLabel.setScrollFactor(0);
+  container.add(shoveLabel);
 
   // initialize once so the HUD starts with correct values
   const initialInv: Inventory = [null, null];
-  drawHUD({ container, hearts, slotTexts, slotIcons, slotUseDots }, maxHp, maxHp, initialInv);
+  const shoveIndicator: HudShoveIndicator = {
+    base: shoveBase,
+    progress: shoveProgress,
+    label: shoveLabel,
+    center: shoveCenter,
+    radius: shoveRadius,
+  };
 
-  return { container, hearts, slotTexts, slotIcons, slotUseDots };
+  drawHUD(
+    { container, hearts, slotTexts, slotIcons, slotUseDots, shoveIndicator },
+    maxHp,
+    maxHp,
+    initialInv,
+  );
+
+  return { container, hearts, slotTexts, slotIcons, slotUseDots, shoveIndicator };
 }
 
 function slotLabel(i: number, it: Item | null) {
@@ -99,8 +161,14 @@ function slotLabel(i: number, it: Item | null) {
   return `${i + 1}: ${it.label}`;
 }
 
-export function drawHUD(hud: HudElements, hp: number, maxHp: number, inv: Inventory) {
-  const { hearts, slotTexts, slotIcons, slotUseDots } = hud;
+export function drawHUD(
+  hud: HudElements,
+  hp: number,
+  maxHp: number,
+  inv: Inventory,
+  options: HudUpdateOptions = {},
+) {
+  const { hearts, slotTexts, slotIcons, slotUseDots, shoveIndicator } = hud;
 
   hearts.clear();
   for (let i = 0; i < maxHp; i += 1) {
@@ -137,4 +205,41 @@ export function drawHUD(hud: HudElements, hp: number, maxHp: number, inv: Invent
       slotIcons[i].setVisible(false);
     }
   }
+
+  const cooldown = options.shoveCooldown;
+  const remaining = Math.max(cooldown?.remainingMs ?? 0, 0);
+  const duration = Math.max(cooldown?.durationMs ?? 1, 1);
+  const fraction = Math.min(Math.max(remaining / duration, 0), 1);
+  const ready = fraction <= 0;
+
+  shoveIndicator.base.clear();
+  const baseStrokeColor = ready ? 0xfff275 : 0x666666;
+  const baseStrokeAlpha = ready ? 0.95 : 0.65;
+  shoveIndicator.base
+    .fillStyle(0x111111, ready ? 0.55 : 0.35)
+    .fillCircle(shoveIndicator.center.x, shoveIndicator.center.y, shoveIndicator.radius)
+    .lineStyle(1.5, baseStrokeColor, baseStrokeAlpha)
+    .strokeCircle(shoveIndicator.center.x, shoveIndicator.center.y, shoveIndicator.radius);
+
+  shoveIndicator.progress.clear();
+  if (!ready) {
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + Math.PI * 2 * fraction;
+    shoveIndicator.progress.fillStyle(0xfff275, 0.8);
+    shoveIndicator.progress.beginPath();
+    shoveIndicator.progress.moveTo(shoveIndicator.center.x, shoveIndicator.center.y);
+    shoveIndicator.progress.arc(
+      shoveIndicator.center.x,
+      shoveIndicator.center.y,
+      shoveIndicator.radius - 2,
+      startAngle,
+      endAngle,
+      false,
+    );
+    shoveIndicator.progress.closePath();
+    shoveIndicator.progress.fillPath();
+  }
+
+  shoveIndicator.label.setColor(ready ? '#ffffff' : '#cccccc');
+  shoveIndicator.label.setAlpha(ready ? 1 : 0.85);
 }

@@ -30,6 +30,8 @@ export class PlayScene extends Phaser.Scene {
   private playerSpeedBoostUntil = 0;
   private playerSpeedBoostMultiplier = 1;
   private playerKnockbackUntil = 0;
+  private playerShoveCooldownUntil = 0;
+  private readonly playerShoveCooldown = 8000;
   constructor() { super('Play'); }
 
   preload() {
@@ -68,6 +70,7 @@ export class PlayScene extends Phaser.Scene {
       onDrop: (slot) => this.drop(slot),
       onCraft: () => this.craft(),
       onSearchInterrupted: () => this.searchSystem.endSearch(),
+      onShove: () => this.tryShove(),
     });
 
     this.inventorySystem.reset();
@@ -186,6 +189,16 @@ export class PlayScene extends Phaser.Scene {
 
   craft() {
     this.inventorySystem.craft();
+  }
+
+  private tryShove() {
+    const now = this.time.now;
+    if (now < this.playerShoveCooldownUntil) return;
+    const facing = this.inputSystem.getFacing();
+    const shoved = this.searchSystem.tryPlayerShove(this.player, facing, now);
+    if (shoved) {
+      this.playerShoveCooldownUntil = now + this.playerShoveCooldown;
+    }
   }
 
   use(slot: 0 | 1) {
@@ -380,6 +393,7 @@ export class PlayScene extends Phaser.Scene {
     this.playerSpeedBoostUntil = 0;
     this.playerSpeedBoostMultiplier = 1;
     this.playerKnockbackUntil = 0;
+    this.playerShoveCooldownUntil = 0;
     this.overItem = null;
     this.inputSystem?.reset();
     if (this.player?.body) {
@@ -445,7 +459,13 @@ export class PlayScene extends Phaser.Scene {
     const playerAnim = `player-${inputResult.moving ? 'walk' : 'idle'}-${inputResult.facing}` as const;
     this.player.anims.play(playerAnim, true);
 
-    drawHUD(this.hud, this.hp, PLAYER_BASE.hp, this.inventorySystem.getInventory());
+    const shoveRemaining = Math.max(this.playerShoveCooldownUntil - now, 0);
+    drawHUD(this.hud, this.hp, PLAYER_BASE.hp, this.inventorySystem.getInventory(), {
+      shoveCooldown: {
+        remainingMs: shoveRemaining,
+        durationMs: this.playerShoveCooldown,
+      },
+    });
     this.searchSystem.updateFurnitureIndicators(this.player);
   }
 
