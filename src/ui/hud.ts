@@ -35,12 +35,14 @@ export type HudElements = {
 
   keyBadges: {
     root: Phaser.GameObjects.Container;
+    setKeys: (keys: KeyId[]) => void;
     dispose: () => void;
   };
 };
 
 export type HudUpdateOptions = {
   shoveCooldown?: { remainingMs: number; durationMs: number };
+  keys?: KeyId[];
 };
 
 const PLATE_BG  = 0x13171f;
@@ -105,26 +107,45 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
   type BadgeVisual = {
     root: Phaser.GameObjects.Container;
     bg: Phaser.GameObjects.Graphics;
+    icon: Phaser.GameObjects.Graphics;
     label: Phaser.GameObjects.Text;
   };
 
   const badgePool: BadgeVisual[] = [];
-  const badgeWidth = 34;
-  const badgeHeight = 18;
+  const badgeWidth = 60;
+  const badgeHeight = 20;
   const badgeGap = 6;
+
+  const drawIcon = (graphics: Phaser.GameObjects.Graphics, color: number) => {
+    graphics.clear();
+    const baseX = 10;
+    const centerY = badgeHeight / 2;
+    const shaftWidth = 9;
+    const shaftHeight = 3;
+    const rimColor = 0x101820;
+    graphics.fillStyle(color, 0.85);
+    graphics.fillCircle(baseX, centerY, 4);
+    graphics.lineStyle(1, rimColor, 0.9).strokeCircle(baseX, centerY, 4);
+    graphics.fillStyle(rimColor, 0.85);
+    graphics.fillRect(baseX + 3, centerY - shaftHeight / 2, shaftWidth, shaftHeight);
+    graphics.fillRect(baseX + shaftWidth + 2, centerY - shaftHeight, 2, shaftHeight * 2);
+    graphics.fillStyle(0xffffff, 0.2);
+    graphics.fillCircle(baseX - 1, centerY - 1, 1.3);
+  };
 
   const ensureBadge = (index: number): BadgeVisual => {
     if (badgePool[index]) return badgePool[index];
     const root = scene.add.container(index * (badgeWidth + badgeGap), 0).setScrollFactor(0).setVisible(false);
     const bg = scene.add.graphics();
-    const label = scene.add.text(badgeWidth / 2, badgeHeight / 2, '', {
+    const icon = scene.add.graphics();
+    const label = scene.add.text(24, badgeHeight / 2, '', {
       fontFamily: 'monospace',
       fontSize: '11px',
       color: '#101820',
-    }).setOrigin(0.5);
-    root.add([bg, label]);
+    }).setOrigin(0, 0.5);
+    root.add([bg, icon, label]);
     keyBadgeRoot.add(root);
-    const visual: BadgeVisual = { root, bg, label };
+    const visual: BadgeVisual = { root, bg, icon, label };
     badgePool.push(visual);
     return visual;
   };
@@ -137,6 +158,7 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
       badge.bg.clear();
       badge.bg.fillStyle(meta.color, 0.92).fillRoundedRect(0, 0, badgeWidth, badgeHeight, 6);
       badge.bg.lineStyle(1, 0x1a202b, 0.9).strokeRoundedRect(0, 0, badgeWidth, badgeHeight, 6);
+      drawIcon(badge.icon, meta.color);
       badge.label.setText(meta.shortLabel).setColor('#101820');
       badge.root.setVisible(true);
     }
@@ -146,11 +168,20 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
   };
 
   const stopWatch = watchKeys(updateBadges);
-  scene.events.once('shutdown', () => {
+  let disposed = false;
+  const disposeBadges = () => {
+    if (disposed) return;
+    disposed = true;
     stopWatch();
-    badgePool.forEach((badge) => badge.root.destroy());
+    badgePool.forEach((badge) => {
+      badge.root.destroy();
+      badge.bg.destroy();
+      badge.icon.destroy();
+      badge.label.destroy();
+    });
     keyBadgeRoot.destroy();
-  });
+  };
+  scene.events.once('shutdown', disposeBadges);
 
   // Craft preview (top-center) — compact
   const cpW = 220, cpH = 24;
@@ -197,7 +228,7 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
       slotPills: [pill1 as any, pill2 as any],
       craftPreview,
       shoveIndicator,
-      keyBadges: { root: keyBadgeRoot, dispose: stopWatch },
+      keyBadges: { root: keyBadgeRoot, setKeys: updateBadges, dispose: disposeBadges },
     },
     maxHp,
     maxHp,
@@ -211,7 +242,7 @@ export function createHUD(scene: Phaser.Scene, maxHp: number): HudElements {
     slotPills: [pill1 as any, pill2 as any],
     craftPreview,
     shoveIndicator,
-    keyBadges: { root: keyBadgeRoot, dispose: stopWatch },
+    keyBadges: { root: keyBadgeRoot, setKeys: updateBadges, dispose: disposeBadges },
   };
 }
 
@@ -253,7 +284,7 @@ export function drawHUD(
   inv: Inventory,
   options: HudUpdateOptions = {},
 ) {
-  const { hearts, slotPills, craftPreview, shoveIndicator } = hud;
+  const { hearts, slotPills, craftPreview, shoveIndicator, keyBadges } = hud;
 
   // Hearts
   hearts.clear();
@@ -276,6 +307,10 @@ export function drawHUD(
     craftPreview.name.setText(def.label ? `Craft: ${def.label}` : 'Craft');
   }
   craftPreview.show(showCraft);
+
+  if (options.keys) {
+    keyBadges.setKeys(options.keys);
+  }
 
   // Shove cooldown
   const cd = options.shoveCooldown;
