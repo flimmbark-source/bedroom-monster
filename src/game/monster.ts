@@ -84,7 +84,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   state: 'wander'|'chase'|'engage' = 'wander';
   actionT = { sweep: 2.5, smash: 4.0, rush: 5.0, roar: 7.0 };
   cd = { sweep: 0, smash: 0, rush: 0, roar: 0 };
-  speed = 140;
+  private baseMoveSpeed = 140;
   target?: Phaser.Types.Physics.Arcade.GameObjectWithBody;
   private baseTint = 0xffffff;
   private baseScale = { x: 1, y: 1 };
@@ -96,8 +96,12 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private activeTelegraphs = new Map<string, ActiveTelegraph>();
   private telegraphSeq = 0;
   private hpBarBg: Phaser.GameObjects.Rectangle;
+  private hpBarRageZone: Phaser.GameObjects.Rectangle;
   private hpBarFill: Phaser.GameObjects.Rectangle;
   private hpBarWidth = 52;
+  private readonly rageThresholdRatio = 0.4;
+  private readonly rageSpeedMultiplier = 1.4;
+  private enraged = false;
   private facing: 'up' | 'down' | 'left' | 'right' = 'down';
   private pushSlowTimer = 0;
   private lastMoveIntent = new Phaser.Math.Vector2(0, 0);
@@ -117,7 +121,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   setDepth(value: number): this {
     super.setDepth(value);
     if (this.hpBarBg) this.hpBarBg.setDepth(value + 3);
-    if (this.hpBarFill) this.hpBarFill.setDepth(value + 4);
+    if (this.hpBarRageZone) this.hpBarRageZone.setDepth(value + 4);
+    if (this.hpBarFill) this.hpBarFill.setDepth(value + 5);
     return this;
   }
 
@@ -142,6 +147,38 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   private playMovementAnimation(moving: boolean) {
     this.anims.play(this.movementAnimKey(moving), true);
+  }
+
+  private updateRageState(currentRatio = Phaser.Math.Clamp(this.hp / this.hpMax, 0, 1)) {
+    const shouldBeEnraged = currentRatio <= this.rageThresholdRatio && this.hp > 0;
+    if (shouldBeEnraged !== this.enraged) {
+      this.enraged = shouldBeEnraged;
+    }
+  }
+
+  private isEnraged() {
+    return this.enraged;
+  }
+
+  private getMoveSpeed() {
+    return this.baseMoveSpeed * (this.isEnraged() ? this.rageSpeedMultiplier : 1);
+  }
+
+  private scaleAttackDuration(duration: number) {
+    return this.isEnraged() ? duration / this.rageSpeedMultiplier : duration;
+  }
+
+  private scaleTimingsForRage(timings: TelegraphTimings): TelegraphTimings {
+    if (!this.isEnraged()) {
+      return timings;
+    }
+    const scale = this.rageSpeedMultiplier;
+    return {
+      preWarn: timings.preWarn / scale,
+      windUp: timings.windUp / scale,
+      commit: timings.commit / scale,
+      recovery: timings.recovery / scale,
+    };
   }
 
   private registerTelegraph(
@@ -358,7 +395,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         pulse = this.scene.tweens.addCounter({
           from: 0,
           to: 1,
-          duration: 220,
+          duration: this.scaleAttackDuration(220),
           yoyo: true,
           repeat: -1,
           ease: 'Sine.easeInOut',
@@ -381,7 +418,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         this.scene.tweens.add({
           targets: state,
           fillAlpha: 0.7,
-          duration: 80,
+          duration: this.scaleAttackDuration(80),
           ease: 'Quad.easeOut',
           onUpdate: draw,
         });
@@ -395,7 +432,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           targets: state,
           fillAlpha: 0,
           strokeAlpha: 0,
-          duration: 250,
+          duration: this.scaleAttackDuration(250),
           ease: 'Sine.easeIn',
           onUpdate: draw,
           onComplete: () => telegraph.destroy(),
@@ -501,7 +538,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         pulse = this.scene.tweens.add({
           targets: target,
           scale: { from: 1.02, to: 0.9 },
-          duration: 220,
+          duration: this.scaleAttackDuration(220),
           ease: 'Sine.easeInOut',
           yoyo: true,
           repeat: -1,
@@ -519,7 +556,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         this.scene.tweens.add({
           targets: [fill, outline],
           alpha: { from: 1, to: 0.7 },
-          duration: 80,
+          duration: this.scaleAttackDuration(80),
           ease: 'Quad.easeOut',
         });
       },
@@ -533,7 +570,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         this.scene.tweens.add({
           targets: [fill, outline],
           alpha: { from: 0.7, to: 0 },
-          duration: 250,
+          duration: this.scaleAttackDuration(250),
           ease: 'Sine.easeIn',
           onComplete: () => telegraph.destroy(),
         });
@@ -663,7 +700,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         pulse = this.scene.tweens.addCounter({
           from: 0,
           to: 1,
-          duration: 220,
+          duration: this.scaleAttackDuration(220),
           yoyo: true,
           repeat: -1,
           ease: 'Sine.easeInOut',
@@ -686,11 +723,14 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         this.scene.tweens.add({
           targets: state,
           fillAlpha: 0.72,
-          duration: 80,
+          duration: this.scaleAttackDuration(80),
           ease: 'Quad.easeOut',
           onUpdate: draw,
         });
-        const v = this.scene.physics.velocityFromRotation(lockedAngle, 340);
+        const v = this.scene.physics.velocityFromRotation(
+          lockedAngle,
+          340 * (this.isEnraged() ? this.rageSpeedMultiplier : 1),
+        );
         this.setVelocity(v.x, v.y);
       },
       startRecovery: () => {
@@ -702,7 +742,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           targets: state,
           fillAlpha: 0,
           strokeAlpha: 0,
-          duration: 250,
+          duration: this.scaleAttackDuration(250),
           ease: 'Sine.easeIn',
           onUpdate: draw,
           onComplete: () => telegraph.destroy(),
@@ -797,7 +837,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         pulse = this.scene.tweens.add({
           targets: [ring, outerEdge, innerEdge],
           scale: { from: 1.03, to: 0.97 },
-          duration: 220,
+          duration: this.scaleAttackDuration(220),
           ease: 'Sine.easeInOut',
           yoyo: true,
           repeat: -1,
@@ -815,7 +855,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         this.scene.tweens.add({
           targets: [ring, outerEdge, innerEdge],
           alpha: { from: 1, to: 0.72 },
-          duration: 80,
+          duration: this.scaleAttackDuration(80),
           ease: 'Quad.easeOut',
         });
       },
@@ -831,7 +871,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         this.scene.tweens.add({
           targets: [ring, outerEdge, innerEdge],
           alpha: { from: 0.72, to: 0 },
-          duration: 250,
+          duration: this.scaleAttackDuration(250),
           ease: 'Sine.easeIn',
           onComplete: () => telegraph.destroy(),
         });
@@ -860,9 +900,19 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.hpBarBg = scene.add.rectangle(x, barY, this.hpBarWidth + 4, 8, 0x07090d, 0.65)
       .setOrigin(0.5, 0.5)
       .setDepth(this.depth + 3);
-    this.hpBarFill = scene.add.rectangle(x - this.hpBarWidth / 2, barY, this.hpBarWidth, 4, 0xff6f6f)
+    this.hpBarRageZone = scene.add.rectangle(
+      x - this.hpBarWidth / 2,
+      barY,
+      this.hpBarWidth * this.rageThresholdRatio,
+      4,
+      0xff3030,
+      0.35,
+    )
       .setOrigin(0, 0.5)
       .setDepth(this.depth + 4);
+    this.hpBarFill = scene.add.rectangle(x - this.hpBarWidth / 2, barY, this.hpBarWidth, 4, 0xff6f6f)
+      .setOrigin(0, 0.5)
+      .setDepth(this.depth + 5);
     this.refreshHpBar();
 
     // Gentle idle breathing so the monster feels alive between actions.
@@ -879,6 +929,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   update(dt: number, player: Phaser.Physics.Arcade.Sprite) {
     this.layoutHpBar();
+    this.updateRageState();
     const body = this.body as Phaser.Physics.Arcade.Body | undefined;
     if (!body) {
       return;
@@ -918,12 +969,14 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     if (this.actionLock) return;
 
     // simple steering
+    const moveSpeed = this.getMoveSpeed();
+
     if (this.state === 'wander') {
-      this.moveToward(player, this.speed * 0.6 * pushSlowFactor);
+      this.moveToward(player, moveSpeed * 0.6 * pushSlowFactor);
     } else if (this.state === 'chase') {
-      this.moveToward(player, this.speed * 1.0 * pushSlowFactor);
+      this.moveToward(player, moveSpeed * 1.0 * pushSlowFactor);
     } else {
-      this.moveToward(player, this.speed * 1.1 * pushSlowFactor);
+      this.moveToward(player, moveSpeed * 1.1 * pushSlowFactor);
       // pick an action; each handler manages its telegraph and cooldown timing
       if (this.cd.sweep === 0) { this.sweep(player); this.cd.sweep = this.actionT.sweep; }
       else if (this.cd.smash === 0) { this.smash(player); this.cd.smash = this.actionT.smash; }
@@ -968,14 +1021,18 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private layoutHpBar() {
     const barY = this.getHpBarY();
     this.hpBarBg.setPosition(this.x, barY);
+    this.hpBarRageZone.setPosition(this.x - this.hpBarWidth / 2, barY);
     this.hpBarFill.setPosition(this.x - this.hpBarWidth / 2, barY);
   }
 
   refreshHpBar(): void {
     const ratio = Phaser.Math.Clamp(this.hp / this.hpMax, 0, 1);
+    this.updateRageState(ratio);
     this.hpBarFill.setDisplaySize(this.hpBarWidth * ratio, 4);
-    const tint = ratio > 0.6 ? 0x7ee57d : ratio > 0.3 ? 0xffd76f : 0xff6f6f;
+    this.hpBarRageZone.setDisplaySize(this.hpBarWidth * this.rageThresholdRatio, 4);
+    const tint = ratio > 0.6 ? 0x7ee57d : ratio > this.rageThresholdRatio ? 0xffd76f : 0xff6f6f;
     this.hpBarFill.setFillStyle(tint);
+    this.hpBarRageZone.setAlpha(this.enraged ? 0.55 : 0.35);
     this.layoutHpBar();
   }
 
@@ -983,6 +1040,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.activeTelegraphs.forEach((telegraph) => telegraph.destroy());
     this.activeTelegraphs.clear();
     this.hpBarBg.destroy();
+    this.hpBarRageZone.destroy();
     this.hpBarFill.destroy();
     super.preDestroy();
   }
@@ -1034,7 +1092,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   sweep(player: Phaser.Physics.Arcade.Sprite) {
-    const timings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 200, recovery: 400 };
+    const baseTimings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 200, recovery: 400 };
+    const timings = this.scaleTimingsForRage(baseTimings);
     let telegraph: TelegraphHandle | undefined;
     const sweepRange = 120;
     this.startAction({
@@ -1049,7 +1108,13 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
             this.setTint(TELEGRAPH_COLORS.preWarn);
             telegraph = this.showSweepTelegraph(player, sweepRange, timings);
             telegraph.startPreWarn();
-            this.spawnImpactEmoji(this.x, this.y - 36, '🌀', 0xffe6b3, timings.preWarn + timings.windUp);
+            this.spawnImpactEmoji(
+              this.x,
+              this.y - 36,
+              '🌀',
+              0xffe6b3,
+              timings.preWarn + timings.windUp,
+            );
           },
 
         },
@@ -1087,7 +1152,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           onComplete: () => telegraph?.startRecovery(),
         },
         {
-          duration: 200,
+          duration: this.scaleAttackDuration(200),
           scaleX: this.baseScale.x,
           scaleY: this.baseScale.y,
           angle: this.baseAngle,
@@ -1101,7 +1166,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   smash(player: Phaser.Physics.Arcade.Sprite) {
-    const timings: TelegraphTimings = { preWarn: 300, windUp: 450, commit: 180, recovery: 450 };
+    const baseTimings: TelegraphTimings = { preWarn: 300, windUp: 450, commit: 180, recovery: 450 };
+    const timings = this.scaleTimingsForRage(baseTimings);
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
       telegraph: [
@@ -1141,7 +1207,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           onComplete: () => telegraph?.startRecovery(),
         },
         {
-          duration: 220,
+          duration: this.scaleAttackDuration(220),
           scaleX: this.baseScale.x,
           scaleY: this.baseScale.y,
           angle: this.baseAngle,
@@ -1155,7 +1221,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   rush(player: Phaser.Physics.Arcade.Sprite) {
-    const timings: TelegraphTimings = { preWarn: 300, windUp: 400, commit: 300, recovery: 500 };
+    const baseTimings: TelegraphTimings = { preWarn: 300, windUp: 400, commit: 300, recovery: 500 };
+    const timings = this.scaleTimingsForRage(baseTimings);
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
       telegraph: [
@@ -1194,11 +1261,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           },
           onComplete: () => {
             telegraph?.startRecovery();
-            this.scene.time.delayedCall(100, () => this.setVelocity(0, 0));
+            this.scene.time.delayedCall(this.scaleAttackDuration(100), () => this.setVelocity(0, 0));
           },
         },
         {
-          duration: 220,
+          duration: this.scaleAttackDuration(220),
           scaleX: this.baseScale.x,
           scaleY: this.baseScale.y,
           ease: 'Quad.easeOut',
@@ -1211,7 +1278,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     });
   }
   roar(player: Phaser.Physics.Arcade.Sprite) {
-    const timings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 150, recovery: 350 };
+    const baseTimings: TelegraphTimings = { preWarn: 250, windUp: 350, commit: 150, recovery: 350 };
+    const timings = this.scaleTimingsForRage(baseTimings);
     let telegraph: TelegraphHandle | undefined;
     this.startAction({
       telegraph: [
@@ -1251,7 +1319,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           onComplete: () => telegraph?.startRecovery(),
         },
         {
-          duration: 200,
+          duration: this.scaleAttackDuration(200),
           scaleX: this.baseScale.x,
           scaleY: this.baseScale.y,
           ease: 'Sine.easeOut',
@@ -1289,7 +1357,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       targets: this,
       scaleX: { from: this.scaleX, to: 0.94 },
       scaleY: { from: this.scaleY, to: 1.06 },
-      duration: 160,
+      duration: this.scaleAttackDuration(160),
       ease: 'Sine.easeOut',
     });
   }
