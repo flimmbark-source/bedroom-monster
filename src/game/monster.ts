@@ -113,10 +113,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     {
       id: 'core',
       part: 'core',
-      width: 96,
-      height: 158,
+      width: 184,
+      height: 215,
       offsetX: 0,
-      offsetY: 12,
+      offsetY: 8,
       damageMultiplier: 1,
     },
   ];
@@ -907,9 +907,15 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     this.setScale(0.9);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const monsterBodyWidth = Math.abs(this.displayWidth) || Math.abs(this.width);
-    const monsterBodyHeight = Math.abs(this.displayHeight) || Math.abs(this.height);
-    body.setSize(monsterBodyWidth, monsterBodyHeight, true);
+    const monsterScaleX = Math.abs(this.scaleX) || 1;
+    const monsterScaleY = Math.abs(this.scaleY) || 1;
+    const MONSTER_FRAME_WIDTH = 184;
+    const MONSTER_FRAME_HEIGHT = 275;
+    const MONSTER_VISIBLE_TOP = 38;
+    const MONSTER_VISIBLE_BOTTOM = 22;
+    const MONSTER_VISIBLE_HEIGHT = MONSTER_FRAME_HEIGHT - MONSTER_VISIBLE_TOP - MONSTER_VISIBLE_BOTTOM;
+    body.setSize(MONSTER_FRAME_WIDTH / monsterScaleX, MONSTER_VISIBLE_HEIGHT / monsterScaleY);
+    body.setOffset(0, MONSTER_VISIBLE_TOP / monsterScaleY);
     this.setCollideWorldBounds(true);
     this.playMovementAnimation(false);
     this.baseScale = { x: this.scaleX, y: this.scaleY };
