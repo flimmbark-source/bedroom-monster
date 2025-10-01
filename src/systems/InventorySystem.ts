@@ -73,17 +73,17 @@ export class InventorySystem {
     this.itemsGroup.clear(true, true);
   }
 
-  gainBottle(slot: 0 | 1, x: number, y: number) {
+  gainSalt(slot: 0 | 1, x: number, y: number) {
     if (!this.inventory[slot]) {
-      this.inventory[slot] = cloneItem('bottle');
+      this.inventory[slot] = cloneItem('salt');
       return;
     }
     const other = slot === 0 ? 1 : 0;
     if (!this.inventory[other]) {
-      this.inventory[other] = cloneItem('bottle');
+      this.inventory[other] = cloneItem('salt');
       return;
     }
-    this.createGroundItem(x, y, 'bottle');
+    this.createGroundItem(x, y, 'salt');
   }
 
   craft() {

@@ -55,15 +55,16 @@ const RESTOCK_POINTS = [
   { x: 880, y: 560 },
 ];
 
-const STARTER_ITEMS: ItemId[] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
+const STARTER_ITEMS: ItemId[] = ['stapler', 'cooking_oil', 'saline', 'flare', 'tape_roll', 'dust_pillow'];
 
 const RESTOCK_POOL: Weighted<ItemId>[] = [
-  { id: 'knife', weight: 1 },
-  { id: 'bottle', weight: 1 },
-  { id: 'soda', weight: 1 },
-  { id: 'match', weight: 1 },
-  { id: 'bandaid', weight: 1 },
-  { id: 'yoyo', weight: 1 },
+  { id: 'stapler', weight: 1 },
+  { id: 'cooking_oil', weight: 1 },
+  { id: 'saline', weight: 1 },
+  { id: 'flare', weight: 1 },
+  { id: 'tape_roll', weight: 1 },
+  { id: 'dust_pillow', weight: 1 },
+  { id: 'salt', weight: 1 },
 ];
 
 const MONSTER_WEIGHTS: Weighted<MonsterId>[] = [{ id: 'brine_walker', weight: 1 }];

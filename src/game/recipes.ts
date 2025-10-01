@@ -3,12 +3,11 @@ import type { ItemId } from './items';
 export type Recipe = { a: ItemId; b: ItemId; out: ItemId };
 
 export const RECIPES: Recipe[] = [
-  { a: 'bandaid', b: 'match', out: 'smoke_patch' },
-  { a: 'bandaid', b: 'soda', out: 'adrenal_patch' },
-  { a: 'bottle', b: 'knife', out: 'glass_shiv' },
-  { a: 'bottle', b: 'match', out: 'fire_bottle' },
-  { a: 'match', b: 'soda', out: 'fizz_bomb' },
-  { a: 'knife', b: 'yoyo', out: 'bladed_yoyo' },
+  { a: 'tape_roll', b: 'flare', out: 'ink_smoke' },
+  { a: 'tape_roll', b: 'saline', out: 'brined_salt' },
+  { a: 'cooking_oil', b: 'stapler', out: 'ledger_spike' },
+  { a: 'cooking_oil', b: 'flare', out: 'ledger_bomb' },
+  { a: 'flare', b: 'saline', out: 'salt' },
 ];
 
 const RECIPE_LOOKUP = RECIPES.reduce<Map<string, ItemId>>((acc, recipe) => {
