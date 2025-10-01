@@ -905,7 +905,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, 'monster', 0);
     scene.add.existing(this);
     scene.physics.add.existing(this);
-    this.setScale(0.45);
+    this.setScale(0.9);
     const body = this.body as Phaser.Physics.Arcade.Body;
     const monsterBodyWidth = Math.abs(this.displayWidth) || Math.abs(this.width);
     const monsterBodyHeight = Math.abs(this.displayHeight) || Math.abs(this.height);
