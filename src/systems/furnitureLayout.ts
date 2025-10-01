@@ -99,8 +99,8 @@ export const BEDROOM_FURNITURE_LAYOUT: FurnitureLayoutEntry[] = [
     },
   },
   {
-    x: 150,
-    y: 520,
+    x: 500,
+    y: 200,
     options: {
       searchable: true,
       name: 'Locker B',
@@ -148,8 +148,8 @@ export const BEDROOM_FURNITURE_LAYOUT: FurnitureLayoutEntry[] = [
     },
   },
   {
-    x: 1110,
-    y: 520,
+    x: 780,
+    y: 200,
     options: {
       searchable: true,
       name: 'Locker D',
