@@ -13,6 +13,7 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@content/*": ["src/content/*"],
       "@game/*": ["src/game/*"],
       "@scenes/*": ["src/scenes/*"],
       "@ui/*": ["src/ui/*"]

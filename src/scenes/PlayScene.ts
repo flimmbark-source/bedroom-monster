@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
-import { ROOM_W, ROOM_H, PLAYER_BASE } from '@game/config';
-import type { Item } from '@game/types';
+import { PLAYER_BASE } from '@game/config';
 import { ITEM_TEXTURE_PATHS } from '@game/items';
 import { Monster, type TelegraphImpact, type MonsterHitbox } from '@game/monster';
 import { createHUD, drawHUD, type HudElements } from '@ui/hud';
@@ -12,7 +11,9 @@ import { SearchSystem, type SpawnEmojiFn } from '../systems/SearchSystem';
 import { TelegraphSystem, type MonsterDamageEvent } from '../systems/TelegraphSystem';
 
 type TelegraphSfxKey = 'whoosh' | 'rise' | 'crack' | 'thud';
-import { BEDROOM_FURNITURE_LAYOUT } from '../systems/furnitureLayout';
+import { ROOMS, pickWeightedValue, type RoomConfig, type RoomId } from '@content/rooms';
+
+const DEFAULT_ROOM_ID: RoomId = 'hallway';
 
 export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
@@ -51,10 +52,15 @@ export class PlayScene extends Phaser.Scene {
     itemsUsed: 0,
     craftsMade: 0,
   };
+  private roomConfig!: RoomConfig;
   constructor() { super('Play'); }
 
   preload() {
-    this.load.image('room-bg', 'assets/sprites/background.png');
+    this.load.image('bg_hallway', 'assets/bg_hallway.png');
+    this.load.image('bg_infirmary', 'assets/bg_infirmary.png');
+    this.load.image('bg_office', 'assets/bg_office.png');
+    this.load.image('bg_kitchen', 'assets/bg_kitchen.png');
+    this.load.image('bg_entrance', 'assets/bg_entrance.png');
     this.load.spritesheet('player', 'assets/sprites/player.png', {
       frameWidth: 102,
       frameHeight: 152,
@@ -64,7 +70,8 @@ export class PlayScene extends Phaser.Scene {
       frameHeight: 275,
     });
 
-    this.load.atlas('furniture', 'assets/sprites/furniture.png', 'assets/sprites/furniture.json');
+    this.load.atlasJSONHash('furniture', 'assets/furniture_sheet.png', 'assets/furniture_atlas.json');
+    this.load.atlasJSONHash('doors_windows', 'assets/doors_windows_sheet.png', 'assets/doors_windows_atlas.json');
 
     Object.entries(ITEM_TEXTURE_PATHS).forEach(([key, path]) => {
       this.load.image(key, path);
@@ -73,6 +80,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   create() {
+    this.roomConfig = ROOMS[DEFAULT_ROOM_ID];
     this.resetPlayerState();
     this.createAnimations();
 
@@ -85,7 +93,12 @@ export class PlayScene extends Phaser.Scene {
 
     this.inventorySystem = new InventorySystem(this);
     this.searchSystem = new SearchSystem(this, this.inventorySystem, spawnEmoji, this.fxDepth);
-    this.spawnerSystem = new SpawnerSystem(this, this.inventorySystem);
+    this.spawnerSystem = new SpawnerSystem(
+      this,
+      this.inventorySystem,
+      this.roomConfig.restockPoints.map((point) => ({ ...point })),
+      this.roomConfig.restockPool.map((entry) => ({ ...entry })),
+    );
     this.inputSystem = new InputSystem(this, {
       onUse: (slot) => this.use(slot),
       onPickup: () => this.tryPickup(),
@@ -101,21 +114,18 @@ export class PlayScene extends Phaser.Scene {
     this.hp = PLAYER_BASE.hp;
     this.overItem = null;
 
-    this.physics.world.setBounds(0, 0, ROOM_W, ROOM_H);
+    const { width: roomWidth, height: roomHeight } = this.roomConfig.size;
+    this.physics.world.setBounds(0, 0, roomWidth, roomHeight);
 
-    const background = this.add.image(ROOM_W / 2, ROOM_H / 2, 'room-bg');
-    background.setDisplaySize(ROOM_W, ROOM_H);
+    const background = this.add.image(roomWidth / 2, roomHeight / 2, this.roomConfig.background.key);
+    background.setDisplaySize(roomWidth, roomHeight);
     background.setDepth(-20);
     background.setScrollFactor(0);
 
-    this.add.image(ROOM_W / 2, ROOM_H / 2 + 20, 'furniture', 'rug')
-      .setScale(1.35)
-      .setDepth(1);
-
     const furniture = this.searchSystem.furnitureGroup;
-    this.searchSystem.loadFurnitureLayout(BEDROOM_FURNITURE_LAYOUT);
+    this.searchSystem.loadFurnitureLayout(this.roomConfig.furniture);
 
-    this.player = this.physics.add.sprite(640, 360, 'player', 8);
+    this.player = this.physics.add.sprite(roomWidth / 2, roomHeight / 2, 'player', 8);
     this.player.setScale(0.5);
     const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     const playerScaleX = Math.abs(this.player.scaleX) || 1;
@@ -143,9 +153,10 @@ export class PlayScene extends Phaser.Scene {
     );
     this.physics.add.collider(furniture, furniture);
 
-    const monsterSpawnX = ROOM_W + 120;
-    const monsterSpawnY = ROOM_H / 2;
-    this.monster = new Monster(this, monsterSpawnX, monsterSpawnY);
+    const monsterSpawnX = roomWidth + 120;
+    const monsterSpawnY = roomHeight / 2;
+    const monsterId = pickWeightedValue(this.roomConfig.monsterWeights, () => Phaser.Math.FloatBetween(0, 1));
+    this.monster = new Monster(this, monsterSpawnX, monsterSpawnY, monsterId);
     this.monster.setDepth(10);
     this.monster.startSpawnBurst({ x: -1, y: 0 }, 900, 0.3);
     this.physics.add.collider(
@@ -169,16 +180,8 @@ export class PlayScene extends Phaser.Scene {
     this.events.on('play-sfx', this.playStubSfx, this);
     this.events.once('shutdown', () => this.events.off('play-sfx', this.playStubSfx, this));
 
-    const starterItems: Item['id'][] = [
-      'knife',
-      'bottle',
-      'soda',
-      'match',
-      'bandaid',
-      'yoyo',
-    ];
-    this.spawnerSystem.spawnInitialItems(starterItems);
-    this.spawnerSystem.scheduleRestock();
+    this.spawnerSystem.spawnInitialItems([...this.roomConfig.starterItems]);
+    this.spawnerSystem.scheduleRestock(this.roomConfig.spawnPacing);
 
     this.physics.add.overlap(this.player, this.inventorySystem.itemsGroup, (_, obj) => {
       this.overItem = obj as GroundItem;
