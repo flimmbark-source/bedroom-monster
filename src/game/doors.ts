@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { consumeKey, hasKey } from './keys';
 import { listRoomDoors, type DoorDefinition, type RoomId } from './world';
+import { createTooltip, type Tooltip } from '@ui/tooltip';
 
 const OPEN_DOORS = new Set<string>();
 
@@ -16,20 +17,11 @@ type DoorInstance = {
   def: DoorDefinition;
   sprite: Phaser.GameObjects.Sprite;
   zone: Phaser.GameObjects.Zone;
-  tooltip: Phaser.GameObjects.Text;
+  tooltip: Tooltip;
   opened: boolean;
   playerNear: boolean;
   baseTooltipColor: string;
 };
-
-const TOOLTIP_STYLE = {
-  fontFamily: 'monospace',
-  fontSize: '12px',
-  color: '#f2f2f2',
-  backgroundColor: '#101820d8',
-  padding: { left: 6, right: 6, top: 2, bottom: 2 },
-  align: 'center',
-} as const;
 
 export class DoorSystem {
   private doors: DoorInstance[] = [];
@@ -67,7 +59,7 @@ export class DoorSystem {
         instance.playerNear = true;
       } else if (instance.playerNear) {
         instance.playerNear = false;
-        instance.tooltip.setVisible(false);
+        instance.tooltip.hide();
       }
     }
   }
@@ -109,16 +101,11 @@ export class DoorSystem {
     zone.setSize(hotspot.width, hotspot.height);
     this.scene.physics.add.existing(zone, true);
 
-    const tooltip = this.scene.add
-      .text(
-        coords.x + (coords.tooltipOffset?.x ?? 0),
-        coords.y + (coords.tooltipOffset?.y ?? -120),
-        '',
-        TOOLTIP_STYLE,
-      )
-      .setOrigin(0.5)
-      .setVisible(false)
-      .setDepth((coords.depth ?? 5) + 1);
+    const tooltip = createTooltip(this.scene, {
+      x: coords.x + (coords.tooltipOffset?.x ?? 0),
+      y: coords.y + (coords.tooltipOffset?.y ?? -120),
+      depth: (coords.depth ?? 5) + 1,
+    });
 
     const opened = OPEN_DOORS.has(def.id);
     if (opened) {
@@ -132,7 +119,7 @@ export class DoorSystem {
       tooltip,
       opened,
       playerNear: false,
-      baseTooltipColor: TOOLTIP_STYLE.color,
+      baseTooltipColor: tooltip.defaultColor,
     });
   }
 
@@ -148,23 +135,21 @@ export class DoorSystem {
   private showTooltip(door: DoorInstance) {
     const requirement = door.def.requirement;
     if (!door.opened && requirement && !hasKey(requirement.key)) {
-      door.tooltip.setColor('#ff8f8f');
-      door.tooltip.setText(`Locked: ${requirement.label}`);
+      door.tooltip.setTextColor('#ff8f8f');
+      door.tooltip.show(`Requires: ${requirement.label}`);
     } else {
-      door.tooltip.setColor(door.baseTooltipColor);
-      door.tooltip.setText(door.opened ? 'Press E to enter' : 'Press E to open');
+      door.tooltip.setTextColor(door.baseTooltipColor);
+      door.tooltip.show(door.opened ? 'Press E to enter' : 'Press E to open');
     }
-    door.tooltip.setVisible(true);
   }
 
   private flashLocked(door: DoorInstance) {
     const requirement = door.def.requirement;
-    door.tooltip.setVisible(true);
-    door.tooltip.setColor('#ff8f8f');
-    door.tooltip.setText(`Locked: ${requirement?.label ?? 'Requires key'}`);
+    door.tooltip.show(`Requires: ${requirement?.label ?? 'Requires key'}`);
+    door.tooltip.setTextColor('#ff8f8f');
     this.scene.time.delayedCall(360, () => {
-      if (!door.tooltip.active) return;
-      door.tooltip.setColor(door.baseTooltipColor);
+      if (door.tooltip.isDestroyed()) return;
+      door.tooltip.setTextColor(door.baseTooltipColor);
     });
   }
 }
