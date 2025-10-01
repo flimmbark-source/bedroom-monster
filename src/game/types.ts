@@ -14,4 +14,4 @@ export type Inventory = [Item | null, Item | null];
 
 export type Stats = { hp: number; maxHp: number; speed: number };
 
-export type MonsterState = 'chase' | 'telegraph' | 'recover' | 'reacquire';
+export type MonsterState = 'wander' | 'chase' | 'engage';

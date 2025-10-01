@@ -1,7 +1,4 @@
 import Phaser from 'phaser';
-
-import { ROOM_W, ROOM_H } from './config';
-import type { MonsterState } from './types';
 const TELEGRAPH_COLORS = {
   preWarn: 0xffe066,
   windUp: 0xffa149,
@@ -84,7 +81,7 @@ export type TelegraphHitCandidate = {
 export class Monster extends Phaser.Physics.Arcade.Sprite {
   private hpMax = 12;
   hp = this.hpMax;
-  state: MonsterState = 'chase';
+  state: 'wander'|'chase'|'engage' = 'wander';
   actionT = { sweep: 2.5, smash: 4.0, rush: 5.0, roar: 7.0 };
   cd = { sweep: 0, smash: 0, rush: 0, roar: 0 };
   private baseMoveSpeed = 140;
@@ -113,20 +110,6 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private readonly walkStretchEnterSpeed = 60;
   private readonly walkStretchExitSpeed = 25;
   private burningUntil = 0;
-  private recoverTimer = 0;
-  private reacquireTimer = 0;
-  private readonly reacquireDuration = 320;
-  private pendingCooldownComplete?: () => void;
-  private blockedTimer = 0;
-  private stalledTimer = 0;
-  private nudgedDirection = new Phaser.Math.Vector2();
-  private nudgeCooldown = 0;
-  private readonly nudgeCheckInterval = 180;
-  private readonly leashDistance = 900;
-  private readonly stallLeashDuration = 2000;
-  private readonly corridorSampleDistance = 280;
-  private readonly leashEdgePadding = 48;
-  private furnitureGroup?: Phaser.Physics.Arcade.Group;
   private hitboxDefs: MonsterHitboxDefinition[] = [
     {
       id: 'core',
@@ -660,8 +643,6 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     let lockedLength = state.length;
     let origin = new Phaser.Math.Vector2(this.x, this.y);
     let tracking = true;
-    const rushSpeed =
-      340 * (this.isEnraged() ? this.rageSpeedMultiplier : 1) * this.getStatusSpeedMultiplier();
 
     const draw = () => {
       fill.clear();
@@ -752,15 +733,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         telegraph.setPhase('windUp');
         tracking = false;
         origin = new Phaser.Math.Vector2(this.x, this.y);
-        const intercept = this.projectRushIntercept(player, timings, rushSpeed);
-        const interceptVector = new Phaser.Math.Vector2(intercept.x - this.x, intercept.y - this.y);
-        if (interceptVector.lengthSq() > 1) {
-          lockedAngle = interceptVector.angle();
-          lockedLength = Phaser.Math.Clamp(interceptVector.length(), 240, 460);
-          state.length = lockedLength;
-        } else {
-          lockedLength = state.length;
-        }
+        lockedLength = state.length;
         state.color = TELEGRAPH_COLORS.windUp;
         state.fillAlpha = 0.65;
         state.strokeAlpha = 0.95;
@@ -799,6 +772,8 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
           ease: 'Quad.easeOut',
           onUpdate: draw,
         });
+        const rushSpeed =
+          340 * (this.isEnraged() ? this.rageSpeedMultiplier : 1) * this.getStatusSpeedMultiplier();
         const v = this.scene.physics.velocityFromRotation(lockedAngle, rushSpeed);
         this.setVelocity(v.x, v.y);
       },
@@ -954,16 +929,10 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
 
 
-  constructor(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    furnitureGroup?: Phaser.Physics.Arcade.Group,
-  ) {
+  constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'monster', 0);
     scene.add.existing(this);
     scene.physics.add.existing(this);
-    this.furnitureGroup = furnitureGroup;
     this.setScale(0.9);
     const body = this.body as Phaser.Physics.Arcade.Body;
     const monsterScaleX = Math.abs(this.scaleX) || 1;
@@ -1030,390 +999,78 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    const hadMoveIntent = this.lastMoveIntent.lengthSq() > 4;
-    const movedAmount = body.deltaAbsX() + body.deltaAbsY();
-
-    if (hadMoveIntent) {
-      if (movedAmount < 0.5) {
-        this.blockedTimer += dt;
-        this.stalledTimer += dt;
-      } else if (movedAmount < 1.4) {
-        this.blockedTimer += dt * 0.5;
-        this.stalledTimer = Math.max(0, this.stalledTimer - dt * 0.3);
-      } else {
-        this.blockedTimer = 0;
-        this.stalledTimer = 0;
-      }
-    } else {
-      this.blockedTimer = 0;
-      if (movedAmount > 1.4) {
-        this.stalledTimer = 0;
-      } else {
-        this.stalledTimer = Math.max(0, this.stalledTimer - dt * 0.6);
-      }
-    }
-
     this.pushSlowTimer = Math.max(0, this.pushSlowTimer - dt);
-    this.nudgeCooldown = Math.max(0, this.nudgeCooldown - dt);
+    const d = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
+    this.state = d > 300 ? 'wander' : d > 140 ? 'chase' : 'engage';
 
     const pushSlowFactor = this.pushSlowTimer > 0 ? 0.55 : 1;
-    const distanceToPlayer = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
 
-    for (const key in this.cd) {
-      (this.cd as any)[key] = Math.max(0, (this.cd as any)[key] - dt);
+    // cooldowns
+    for (const k in this.cd) (this.cd as any)[k] = Math.max(0, (this.cd as any)[k] - dt);
+
+    // maintain a gentle sway while walking unless a telegraph is running.
+    if (!this.actionLock) {
+      const speed = body.velocity.length() || 0;
+      if (speed > this.walkStretchEnterSpeed) {
+        if (!this.walkStretchActive) {
+          this.walkStretchActive = true;
+          this.idleTween?.pause();
+        }
+        this.setWalkingStretchScale();
+      } else if (speed < this.walkStretchExitSpeed) {
+        if (this.walkStretchActive) {
+          this.walkStretchActive = false;
+          this.resetPose();
+          this.idleTween?.resume();
+        } else if (!this.currentChain) {
+          this.resetPose();
+          this.idleTween?.resume();
+        }
+      }
     }
-
-    this.updateStateTimers(dt);
-
-    switch (this.state) {
-      case 'telegraph':
-        this.setVelocity(0, 0);
-        break;
-      case 'recover':
-        this.setVelocity(0, 0);
-        break;
-      case 'reacquire':
-        this.updateReacquireMovement(player, pushSlowFactor, distanceToPlayer);
-        break;
-      case 'chase':
-      default:
-        this.updateChaseMovement(player, pushSlowFactor, distanceToPlayer);
-        break;
-    }
-
-    this.applyLeash(distanceToPlayer, player);
 
     if (!this.actionLock) {
-      this.updateMovementPose(body, player);
-    }
-  }
-
-  private updateStateTimers(dt: number) {
-    if (this.state === 'recover') {
-      if (this.recoverTimer > 0) {
-        this.recoverTimer = Math.max(0, this.recoverTimer - dt);
-        if (this.recoverTimer === 0) {
-          const handler = this.pendingCooldownComplete;
-          this.pendingCooldownComplete = undefined;
-          handler?.();
-        }
+      const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
+      if (moving) {
+        this.updateFacingFromVelocity();
+      } else if (player) {
+        this.setFacingFromVector(player.x - this.x, player.y - this.y);
       }
-    } else if (this.state === 'reacquire') {
-      if (this.reacquireTimer > 0) {
-        this.reacquireTimer = Math.max(0, this.reacquireTimer - dt);
-        if (this.reacquireTimer === 0) {
-          this.enterState('chase');
-        }
-      }
+      this.playMovementAnimation(moving);
     }
-  }
 
-  private updateChaseMovement(
-    player: Phaser.Physics.Arcade.Sprite,
-    pushSlowFactor: number,
-    distanceToPlayer: number,
-  ) {
     if (this.actionLock) return;
 
+    // simple steering
     const moveSpeed = this.getMoveSpeed();
-    const rangeFactor = distanceToPlayer > 420 ? 0.72 : distanceToPlayer > 220 ? 0.95 : 1.12;
-    const targetSpeed = moveSpeed * rangeFactor * pushSlowFactor;
 
-    const direction = this.computeSteerDirection(player);
-    if (direction.lengthSq() < 1) {
-      this.setVelocity(0, 0);
+    if (this.state === 'wander') {
+      this.moveToward(player, moveSpeed * 0.6 * pushSlowFactor);
+    } else if (this.state === 'chase') {
+      this.moveToward(player, moveSpeed * 1.0 * pushSlowFactor);
     } else {
-      direction.normalize().scale(targetSpeed);
-      this.setVelocity(direction.x, direction.y);
-    }
-
-    if (distanceToPlayer <= 160) {
-      this.tryStartAttack(player);
-    }
-  }
-
-  private updateReacquireMovement(
-    player: Phaser.Physics.Arcade.Sprite,
-    pushSlowFactor: number,
-    distanceToPlayer: number,
-  ) {
-    const moveSpeed = this.getMoveSpeed();
-    const rangeFactor = distanceToPlayer > 420 ? 0.7 : 0.88;
-    const targetSpeed = moveSpeed * rangeFactor * pushSlowFactor;
-
-    const direction = this.computeSteerDirection(player);
-    if (direction.lengthSq() < 1) {
-      this.setVelocity(0, 0);
-    } else {
-      direction.normalize().scale(targetSpeed);
-      this.setVelocity(direction.x, direction.y);
+      this.moveToward(player, moveSpeed * 1.1 * pushSlowFactor);
+      // pick an action; each handler manages its telegraph and cooldown timing
+      if (this.cd.sweep === 0) { this.sweep(player); this.cd.sweep = this.actionT.sweep; }
+      else if (this.cd.smash === 0) { this.smash(player); this.cd.smash = this.actionT.smash; }
+      else if (this.cd.rush === 0) { this.rush(player); this.cd.rush = this.actionT.rush; }
+      else if (this.cd.roar === 0) { this.roar(player); this.cd.roar = this.actionT.roar; }
     }
   }
 
-  private computeSteerDirection(player: Phaser.Physics.Arcade.Sprite) {
-    const direction = new Phaser.Math.Vector2(player.x - this.x, player.y - this.y);
-    if (direction.lengthSq() === 0) {
-      return direction;
-    }
-    direction.normalize();
-
-    if (this.blockedTimer >= 300) {
-      if (this.nudgeCooldown <= 0 || this.nudgedDirection.lengthSq() === 0) {
-        const corridorDirection = this.findCorridorDirection(direction);
-        const diff = Phaser.Math.Angle.Wrap(corridorDirection.angle() - direction.angle());
-        if (Math.abs(diff) > Phaser.Math.DegToRad(6)) {
-          this.nudgedDirection.copy(corridorDirection);
-        } else {
-          this.nudgedDirection.set(0, 0);
-        }
-        this.nudgeCooldown = this.nudgeCheckInterval;
-      }
-    } else if (this.nudgeCooldown <= 0) {
-      this.nudgedDirection.set(0, 0);
-    }
-
-    if (this.nudgedDirection.lengthSq() > 0) {
-      const blended = direction.clone().scale(0.55).add(this.nudgedDirection.clone().scale(0.45));
-      return blended.normalize();
-    }
-
-    return direction;
-  }
-
-  private findCorridorDirection(baseDirection: Phaser.Math.Vector2) {
-    const candidateAngles = [0, 0.36, -0.36, 0.72, -0.72];
-    let bestDirection = baseDirection.clone();
-    let bestScore = -Infinity;
-
-    for (const angle of candidateAngles) {
-      const candidate = baseDirection.clone().rotate(angle);
-      if (candidate.lengthSq() === 0) continue;
-      candidate.normalize();
-      const clearance = this.measureCorridorClearance(candidate);
-      const alignment = Phaser.Math.Clamp(candidate.dot(baseDirection), -1, 1);
-      const score = clearance * 0.01 + alignment * 0.9;
-      if (clearance <= 4 && angle !== 0) continue;
-      if (score > bestScore) {
-        bestScore = score;
-        bestDirection = candidate;
-      }
-    }
-
-    return bestDirection.lengthSq() === 0 ? baseDirection.clone().normalize() : bestDirection.normalize();
-  }
-
-  private measureCorridorClearance(direction: Phaser.Math.Vector2) {
-    const normalized = direction.clone().normalize();
-    if (normalized.lengthSq() === 0) return 0;
-    const perpendicular = new Phaser.Math.Vector2(-normalized.y, normalized.x);
-    const maxDistance = this.corridorSampleDistance;
-    let minClearance = this.corridorSampleDistance;
-
-    this.furnitureGroup?.children.each((child) => {
-      const rect = child as Phaser.GameObjects.Rectangle;
-      if (!rect || !rect.active) return;
-      const dx = rect.x - this.x;
-      const dy = rect.y - this.y;
-      const along = dx * normalized.x + dy * normalized.y;
-      if (along < -48 || along > maxDistance) return;
-      const width = rect.displayWidth ?? rect.width ?? 0;
-      const height = rect.displayHeight ?? rect.height ?? 0;
-      const halfExtent = Math.max(width, height) * 0.5 + 28;
-      const lateral = Math.abs(dx * perpendicular.x + dy * perpendicular.y);
-      const clearance = lateral - halfExtent;
-      minClearance = Math.min(minClearance, clearance);
-    });
-
-    const positiveBounds = this.distanceToBoundsAlong(perpendicular);
-    const negativeBounds = this.distanceToBoundsAlong(perpendicular.clone().negate());
-    if (typeof positiveBounds === 'number') {
-      minClearance = Math.min(minClearance, positiveBounds);
-    }
-    if (typeof negativeBounds === 'number') {
-      minClearance = Math.min(minClearance, negativeBounds);
-    }
-
-    return Math.max(minClearance, 0);
-  }
-
-  private distanceToBoundsAlong(direction: Phaser.Math.Vector2) {
-    const normalized = direction.clone().normalize();
-    if (normalized.lengthSq() === 0) return undefined;
-    const candidates: number[] = [];
-
-    if (normalized.x > 0.0001) {
-      candidates.push((ROOM_W - this.leashEdgePadding - this.x) / normalized.x);
-    } else if (normalized.x < -0.0001) {
-      candidates.push((this.leashEdgePadding - this.x) / normalized.x);
-    }
-
-    if (normalized.y > 0.0001) {
-      candidates.push((ROOM_H - this.leashEdgePadding - this.y) / normalized.y);
-    } else if (normalized.y < -0.0001) {
-      candidates.push((this.leashEdgePadding - this.y) / normalized.y);
-    }
-
-    const positives = candidates.filter((value) => value > 0).map((value) => Math.abs(value));
-    if (positives.length === 0) return undefined;
-    return Math.min(...positives);
-  }
-
-  private projectRushIntercept(
-    player: Phaser.Physics.Arcade.Sprite,
-    timings: TelegraphTimings,
-    rushSpeed: number,
-  ) {
-    const playerBody = player.body as Phaser.Physics.Arcade.Body | undefined;
-    if (!playerBody) {
-      return new Phaser.Math.Vector2(player.x, player.y);
-    }
-
-    const playerVelocity = new Phaser.Math.Vector2(playerBody.velocity.x, playerBody.velocity.y);
-    const rel = new Phaser.Math.Vector2(player.x - this.x, player.y - this.y);
-    const windUpSeconds = timings.windUp / 1000;
-    const r = rushSpeed;
-    const rv2 = r * r;
-    const vv = playerVelocity.dot(playerVelocity);
-    const A = vv - rv2;
-    const B = 2 * rel.dot(playerVelocity) + 2 * rv2 * windUpSeconds;
-    const C = rel.dot(rel) - rv2 * windUpSeconds * windUpSeconds;
-    const roots: number[] = [];
-
-    if (Math.abs(A) < 0.0001) {
-      if (Math.abs(B) > 0.0001) {
-        roots.push(-C / B);
-      }
-    } else {
-      const discriminant = B * B - 4 * A * C;
-      if (discriminant >= 0) {
-        const sqrt = Math.sqrt(discriminant);
-        roots.push((-B - sqrt) / (2 * A));
-        roots.push((-B + sqrt) / (2 * A));
-      }
-    }
-
-    let bestT = Number.POSITIVE_INFINITY;
-    for (const t of roots) {
-      if (!Number.isFinite(t)) continue;
-      if (t < windUpSeconds) continue;
-      if (t < bestT) {
-        bestT = t;
-      }
-    }
-
-    if (!Number.isFinite(bestT) || bestT === Number.POSITIVE_INFINITY) {
-      bestT = windUpSeconds + (timings.commit / 1000) * 0.5;
-    }
-
-    const predicted = new Phaser.Math.Vector2(player.x, player.y).add(
-      playerVelocity.clone().scale(bestT),
-    );
-
-    return predicted;
-  }
-
-  private updateMovementPose(body: Phaser.Physics.Arcade.Body, player: Phaser.Physics.Arcade.Sprite) {
-    const speed = body.velocity.length() || 0;
-    if (speed > this.walkStretchEnterSpeed) {
-      if (!this.walkStretchActive) {
-        this.walkStretchActive = true;
-        this.idleTween?.pause();
-      }
-      this.setWalkingStretchScale();
-    } else if (speed < this.walkStretchExitSpeed) {
-      if (this.walkStretchActive) {
-        this.walkStretchActive = false;
-        this.resetPose();
-        this.idleTween?.resume();
-      } else if (!this.currentChain) {
-        this.resetPose();
-        this.idleTween?.resume();
-      }
-    }
-
-    const moving = body.deltaAbsX() > 0.5 || body.deltaAbsY() > 0.5;
-    if (moving) {
-      this.updateFacingFromVelocity();
-    } else if (player) {
-      this.setFacingFromVector(player.x - this.x, player.y - this.y);
-    }
-    this.playMovementAnimation(moving);
-  }
-
-  private applyLeash(distanceToPlayer: number, player: Phaser.Physics.Arcade.Sprite) {
-    if (this.state === 'telegraph' || this.state === 'recover') return;
-    if (distanceToPlayer > this.leashDistance || this.stalledTimer >= this.stallLeashDuration) {
-      this.softResetNearPlayer(player);
-    }
-  }
-
-  private softResetNearPlayer(player: Phaser.Physics.Arcade.Sprite) {
+  private moveToward(target: Phaser.Math.Vector2Like, speed: number) {
     const body = this.body as Phaser.Physics.Arcade.Body | undefined;
     if (!body) return;
 
-    const angle = Phaser.Math.Angle.Between(player.x, player.y, this.x, this.y);
-    const offsetDistance = 360;
-    const offset = new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)).setLength(offsetDistance);
-    const targetX = Phaser.Math.Clamp(
-      player.x + offset.x,
-      this.leashEdgePadding,
-      ROOM_W - this.leashEdgePadding,
-    );
-    const targetY = Phaser.Math.Clamp(
-      player.y + offset.y,
-      this.leashEdgePadding,
-      ROOM_H - this.leashEdgePadding,
-    );
+    const direction = new Phaser.Math.Vector2(target.x - this.x, target.y - this.y);
 
-    body.reset(targetX, targetY);
-    this.setPosition(targetX, targetY);
-    this.setVelocity(0, 0);
-    this.spawnBurstTimer = 0;
-    this.blockedTimer = 0;
-    this.stalledTimer = 0;
-    this.nudgedDirection.set(0, 0);
-    this.recoverTimer = 0;
-    this.pendingCooldownComplete = undefined;
-    this.currentChain?.stop();
-    this.currentChain = undefined;
-    this.actionLock = false;
-    this.resetPose();
-    this.idleTween?.resume();
-    this.enterState('reacquire', { reacquireDuration: this.reacquireDuration });
-  }
+    if (direction.lengthSq() < 1) {
+      this.setVelocity(0, 0);
+      return;
+    }
 
-  private enterState(next: MonsterState, options?: { recoverDuration?: number; reacquireDuration?: number }) {
-    this.state = next;
-    if (next === 'recover') {
-      this.recoverTimer = options?.recoverDuration ?? this.recoverTimer;
-      this.reacquireTimer = 0;
-    } else if (next === 'reacquire') {
-      this.reacquireTimer = options?.reacquireDuration ?? this.reacquireDuration;
-      this.recoverTimer = 0;
-    } else if (next === 'chase') {
-      this.recoverTimer = 0;
-      this.reacquireTimer = 0;
-    }
-    if (next !== 'chase') {
-      this.nudgedDirection.set(0, 0);
-    }
-  }
-
-  private tryStartAttack(player: Phaser.Physics.Arcade.Sprite) {
-    if (this.actionLock) return;
-    if (this.cd.sweep === 0) {
-      this.sweep(player);
-      this.cd.sweep = this.actionT.sweep;
-    } else if (this.cd.smash === 0) {
-      this.smash(player);
-      this.cd.smash = this.actionT.smash;
-    } else if (this.cd.rush === 0) {
-      this.rush(player);
-      this.cd.rush = this.actionT.rush;
-    } else if (this.cd.roar === 0) {
-      this.roar(player);
-      this.cd.roar = this.actionT.roar;
-    }
+    direction.normalize().scale(speed);
+    this.setVelocity(direction.x, direction.y);
   }
 
   getPushIntent() {
@@ -1475,7 +1132,6 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.currentChain?.stop();
     this.idleTween?.pause();
     this.anims.stop();
-    this.enterState('telegraph');
 
     const telegraphTweens = Array.isArray(config.telegraph) ? config.telegraph : [config.telegraph];
     const attackTweens = Array.isArray(config.attack) ? config.attack : [config.attack];
@@ -1488,13 +1144,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       onComplete: () => {
         this.currentChain = undefined;
         config.cooldown.onStart?.();
-        this.enterState('recover', { recoverDuration: config.cooldown.duration });
-        this.pendingCooldownComplete = () => {
+        this.scene.time.delayedCall(config.cooldown.duration, () => {
           this.resetPose();
           this.actionLock = false;
           this.idleTween?.resume();
-          this.enterState('reacquire', { reacquireDuration: this.reacquireDuration });
-        };
+        });
       },
     });
   }
