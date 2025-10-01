@@ -7,12 +7,19 @@ import { pickWeightedValue } from '@content/rooms';
 import { InventorySystem } from './InventorySystem';
 
 export class SpawnerSystem {
+  private restockInitialEvent?: Phaser.Time.TimerEvent;
+  private restockLoopEvent?: Phaser.Time.TimerEvent;
+
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly inventory: InventorySystem,
     private readonly restockPoints: { x: number; y: number }[],
     private readonly restockPool: Weighted<ItemId>[],
   ) {}
+
+  destroy() {
+    this.clearRestockEvents();
+  }
 
   spawnInitialItems(items: ItemId[]) {
     items.forEach((itemId, index) => {
@@ -41,6 +48,7 @@ export class SpawnerSystem {
   }
 
   scheduleRestock({ restockIntervalMs, restockInitialDelayMs }: SpawnPacing) {
+    this.clearRestockEvents();
     if (restockIntervalMs <= 0) {
       return;
     }
@@ -48,13 +56,24 @@ export class SpawnerSystem {
     const spawnDrop = () => this.restockFurniture();
     const initialDelay = restockInitialDelayMs ?? restockIntervalMs;
 
-    this.scene.time.delayedCall(initialDelay, () => {
+    this.restockInitialEvent = this.scene.time.delayedCall(initialDelay, () => {
       spawnDrop();
-      this.scene.time.addEvent({
+      this.restockLoopEvent = this.scene.time.addEvent({
         delay: restockIntervalMs,
         loop: true,
         callback: spawnDrop,
       });
     });
+  }
+
+  private clearRestockEvents() {
+    if (this.restockInitialEvent) {
+      this.restockInitialEvent.remove(false);
+      this.restockInitialEvent = undefined;
+    }
+    if (this.restockLoopEvent) {
+      this.restockLoopEvent.remove(false);
+      this.restockLoopEvent = undefined;
+    }
   }
 }

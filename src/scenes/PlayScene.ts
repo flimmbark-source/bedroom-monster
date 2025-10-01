@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { PLAYER_BASE } from '@game/config';
-import { ITEM_ICON_SOURCES } from '@game/items';
+import { ITEM_ICON_SOURCES, type Item } from '@game/items';
 import { DoorSystem, resetDoors } from '@game/doors';
 import { resetKeys } from '@game/keys';
 import type { DoorDefinition, RoomId } from '@game/world';
@@ -14,7 +14,8 @@ import { SearchSystem, type SpawnEmojiFn } from '../systems/SearchSystem';
 import { TelegraphSystem, type MonsterDamageEvent } from '../systems/TelegraphSystem';
 
 type TelegraphSfxKey = 'whoosh' | 'rise' | 'crack' | 'thud';
-import { ROOMS, pickWeightedValue, type RoomConfig } from '@content/rooms';
+import { pickWeightedValue } from '@content/rooms';
+import { RoomLoader, type LoadedRoom } from './RoomLoader';
 
 const DEFAULT_ROOM_ID: RoomId = 'hallway';
 
@@ -56,7 +57,11 @@ export class PlayScene extends Phaser.Scene {
     itemsUsed: 0,
     craftsMade: 0,
   };
-  private roomConfig!: RoomConfig;
+  private roomLoader!: RoomLoader;
+  private roomState!: LoadedRoom;
+  private transitioningRoom = false;
+  private monsterFurnitureCollider?: Phaser.Physics.Arcade.Collider;
+  private spawnEmojiFn!: SpawnEmojiFn;
   constructor() { super('Play'); }
 
   preload() {
@@ -94,7 +99,6 @@ export class PlayScene extends Phaser.Scene {
     resetKeys();
     resetDoors();
 
-    this.roomConfig = ROOMS[DEFAULT_ROOM_ID];
     this.resetPlayerState();
     this.createAnimations();
 
@@ -102,17 +106,11 @@ export class PlayScene extends Phaser.Scene {
     this.runStats = { damageDealt: 0, itemsUsed: 0, craftsMade: 0 };
     this.runStartAt = this.time.now;
 
-    const spawnEmoji: SpawnEmojiFn = (x, y, emoji, fontSize, tint, duration) =>
+    this.spawnEmojiFn = (x, y, emoji, fontSize, tint, duration) =>
       this.spawnFloatingEmoji(x, y, emoji, fontSize, tint, duration);
-
     this.inventorySystem = new InventorySystem(this);
-    this.searchSystem = new SearchSystem(this, this.inventorySystem, spawnEmoji, this.fxDepth);
-    this.spawnerSystem = new SpawnerSystem(
-      this,
-      this.inventorySystem,
-      this.roomConfig.restockPoints.map((point) => ({ ...point })),
-      this.roomConfig.restockPool.map((entry) => ({ ...entry })),
-    );
+    this.searchSystem = new SearchSystem(this, this.inventorySystem, this.spawnEmojiFn, this.fxDepth);
+    this.roomLoader = new RoomLoader(this, this.searchSystem, this.inventorySystem);
     this.inputSystem = new InputSystem(this, {
       onUse: (slot) => this.use(slot),
       onPickup: () => this.tryPickup(),
@@ -128,16 +126,9 @@ export class PlayScene extends Phaser.Scene {
     this.hp = PLAYER_BASE.hp;
     this.overItem = null;
 
-    const { width: roomWidth, height: roomHeight } = this.roomConfig.size;
-    this.physics.world.setBounds(0, 0, roomWidth, roomHeight);
+    this.roomState = this.roomLoader.load(DEFAULT_ROOM_ID);
 
-    const background = this.add.image(roomWidth / 2, roomHeight / 2, this.roomConfig.background.key);
-    background.setDisplaySize(roomWidth, roomHeight);
-    background.setDepth(-20);
-    background.setScrollFactor(0);
-
-    const furniture = this.searchSystem.furnitureGroup;
-    this.searchSystem.loadFurnitureLayout(this.roomConfig.furniture);
+    const { width: roomWidth, height: roomHeight } = this.roomState.size;
 
     this.player = this.physics.add.sprite(roomWidth / 2, roomHeight / 2, 'player', 8);
     this.player.setScale(0.5);
@@ -158,11 +149,12 @@ export class PlayScene extends Phaser.Scene {
     this.doorSystem = new DoorSystem(this, this.player, {
       onDoorOpened: (door) => this.handleDoorOpened(door),
     });
-    this.doorSystem.setRoom(this.roomConfig.id);
+    this.roomLoader.setDoorSystem(this.doorSystem);
 
     this.inputSystem.setPlayer(this.player);
     this.inputSystem.create();
 
+    const furniture = this.searchSystem.furnitureGroup;
     this.physics.add.collider(
       this.player,
       furniture,
@@ -172,26 +164,14 @@ export class PlayScene extends Phaser.Scene {
     );
     this.physics.add.collider(furniture, furniture);
 
-    const monsterSpawnX = roomWidth + 120;
-    const monsterSpawnY = roomHeight / 2;
-    const monsterId = pickWeightedValue(this.roomConfig.monsterWeights, () => Phaser.Math.FloatBetween(0, 1));
-    this.monster = new Monster(this, monsterSpawnX, monsterSpawnY, monsterId);
-    this.monster.setDepth(10);
-    this.monster.startSpawnBurst({ x: -1, y: 0 }, 900, 0.3);
-    this.physics.add.collider(
-      this.monster,
-      furniture,
-      this.searchSystem.handleMonsterFurnitureCollision,
-      undefined,
-      this.searchSystem,
-    );
+    this.spawnMonsterForCurrentRoom();
     this.telegraphSystem = new TelegraphSystem(
       this,
       this.player,
       this.monster,
       this.inputSystem,
       this.fxDepth,
-      spawnEmoji,
+      this.spawnEmojiFn,
       () => this.handleRunEnd('victory'),
       (event) => this.handleMonsterDamaged(event),
     );
@@ -202,8 +182,7 @@ export class PlayScene extends Phaser.Scene {
       this.doorSystem?.destroy();
     });
 
-    this.spawnerSystem.spawnInitialItems([...this.roomConfig.starterItems]);
-    this.spawnerSystem.scheduleRestock(this.roomConfig.spawnPacing);
+    this.setupSpawnerForCurrentRoom();
 
     this.physics.add.overlap(this.player, this.inventorySystem.itemsGroup, (_, obj) => {
       this.overItem = obj as GroundItem;
@@ -213,6 +192,47 @@ export class PlayScene extends Phaser.Scene {
 
     this.hud = createHUD(this, 5);
     this.endCard = createEndCard(this);
+  }
+
+  private setupSpawnerForCurrentRoom() {
+    this.spawnerSystem?.destroy();
+    this.spawnerSystem = new SpawnerSystem(
+      this,
+      this.inventorySystem,
+      this.roomState.restockPoints.map((point) => ({ ...point })),
+      this.roomState.spawns.items.map((entry) => ({ ...entry })),
+    );
+    this.spawnerSystem.spawnInitialItems([...this.roomState.starterItems]);
+    this.spawnerSystem.scheduleRestock(this.roomState.spawns.restock);
+  }
+
+  private spawnMonsterForCurrentRoom() {
+    this.monster?.destroy();
+    this.monsterFurnitureCollider?.destroy();
+    this.monsterFurnitureCollider = undefined;
+
+    const { width: roomWidth, height: roomHeight } = this.roomState.size;
+    const monsterSpawnX = roomWidth + 120;
+    const monsterSpawnY = roomHeight / 2;
+    const monsterId = pickWeightedValue(
+      this.roomState.spawns.monsters,
+      () => Phaser.Math.FloatBetween(0, 1),
+    );
+    const isMiniElite = Phaser.Math.FloatBetween(0, 1) < 0.2;
+
+    this.monster = new Monster(this, monsterSpawnX, monsterSpawnY, monsterId);
+    if (isMiniElite) {
+      this.monster.promoteToMiniElite();
+    }
+    this.monster.setDepth(10);
+    this.monster.startSpawnBurst({ x: -1, y: 0 }, 900, 0.3);
+    this.monsterFurnitureCollider = this.physics.add.collider(
+      this.monster,
+      this.searchSystem.furnitureGroup,
+      this.searchSystem.handleMonsterFurnitureCollision,
+      undefined,
+      this.searchSystem,
+    );
   }
 
   tryPickup(): boolean {
@@ -257,57 +277,59 @@ export class PlayScene extends Phaser.Scene {
     if (this.runEnded) return;
     const item = this.inventorySystem.getItem(slot);
     if (!item) return;
-    const id = item.id;
-    let consumed = true;
-    switch (id) {
-      case 'knife':
-        this.swingKnife();
-        break;
-      case 'yoyo':
-        this.spinYoyo();
-        break;
-      case 'bottle':
-        this.throwBottle(2);
-        break;
-      case 'match':
-        this.fanMatches();
-        break;
-      case 'bandaid':
-        this.hp = Math.min(5, this.hp + 1);
-        this.telegraphSystem.showSelfBuffTelegraph('💗', 0xff8ca3, 480);
-        break;
-      case 'soda':
-        this.speedBoost(3000);
-        this.telegraphSystem.showSelfBuffTelegraph('🥤', 0x9de4ff, 420);
-        this.afterDelay(3000, () => this.gainBottle(slot));
-        break;
-      case 'fire_bottle':
-        this.throwBottle(3, true);
-        break;
-      case 'glass_shiv':
-        this.stabWithShiv();
-        break;
-      case 'bladed_yoyo':
-        this.spinBladedYoyo();
-        break;
-      case 'smoke_patch':
-        this.deploySmokeVeil();
-        break;
-      case 'adrenal_patch':
-        this.hp = Math.min(5, this.hp + 1);
-        this.speedBoost(2000);
-        this.telegraphSystem.showSelfBuffTelegraph('💉', 0xffc26f, 540);
-        break;
-      case 'fizz_bomb':
-        this.throwBottle(3, false, true);
-        break;
-      default:
-        consumed = false;
-    }
+    const consumed = this.useItemByVerb(item, slot);
     if (consumed) {
       this.runStats.itemsUsed += 1;
       this.inventorySystem.consume(slot);
       this.refreshHUD();
+    }
+  }
+
+  private useItemByVerb(item: Item, slot: 0 | 1): boolean {
+    switch (item.verb) {
+      case 'slash':
+        this.swingKnife();
+        return true;
+      case 'swing':
+        this.spinYoyo();
+        return true;
+      case 'throw':
+        this.throwBottle(2);
+        return true;
+      case 'ignite':
+        this.fanMatches();
+        return true;
+      case 'heal':
+        this.hp = Math.min(5, this.hp + 1);
+        this.telegraphSystem.showSelfBuffTelegraph('💗', 0xff8ca3, 480);
+        return true;
+      case 'drink':
+        this.speedBoost(3000);
+        this.telegraphSystem.showSelfBuffTelegraph('🥤', 0x9de4ff, 420);
+        this.afterDelay(3000, () => this.gainBottle(slot));
+        return true;
+      case 'hurl':
+        this.throwBottle(3, true);
+        return true;
+      case 'stab':
+        this.stabWithShiv();
+        return true;
+      case 'reap':
+        this.spinBladedYoyo();
+        return true;
+      case 'mask':
+        this.deploySmokeVeil();
+        return true;
+      case 'boost':
+        this.hp = Math.min(5, this.hp + 1);
+        this.speedBoost(2000);
+        this.telegraphSystem.showSelfBuffTelegraph('💉', 0xffc26f, 540);
+        return true;
+      case 'detonate':
+        this.throwBottle(3, false, true);
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -742,8 +764,51 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
-  private handleDoorOpened(door: DoorDefinition) {
+  private async handleDoorOpened(door: DoorDefinition) {
     this.events.emit('door-opened', door);
+    if (this.runEnded || this.transitioningRoom) {
+      return;
+    }
+
+    this.transitioningRoom = true;
+    this.searchSystem.endSearch();
+    this.overItem = null;
+    this.inputSystem.reset();
+
+    const playerBody = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+    if (playerBody) {
+      playerBody.setVelocity(0, 0);
+    }
+
+    this.spawnerSystem?.destroy();
+    this.monster?.destroy();
+    this.monsterFurnitureCollider?.destroy();
+    this.monsterFurnitureCollider = undefined;
+
+    const nextRoom = await this.roomLoader.transitionTo(door.target);
+    this.roomState = nextRoom;
+
+    const { width: roomWidth, height: roomHeight } = this.roomState.size;
+    this.player.setPosition(roomWidth / 2, roomHeight / 2);
+    if (playerBody) {
+      playerBody.reset(this.player.x, this.player.y);
+    }
+
+    this.spawnMonsterForCurrentRoom();
+    this.telegraphSystem = new TelegraphSystem(
+      this,
+      this.player,
+      this.monster,
+      this.inputSystem,
+      this.fxDepth,
+      this.spawnEmojiFn,
+      () => this.handleRunEnd('victory'),
+      (event) => this.handleMonsterDamaged(event),
+    );
+
+    this.setupSpawnerForCurrentRoom();
+    this.refreshHUD();
+    this.transitioningRoom = false;
   }
 
   private refreshHUD() {
@@ -759,7 +824,7 @@ export class PlayScene extends Phaser.Scene {
 
   update(time: number, delta: number) {
     this.doorSystem?.update();
-    if (this.runEnded) {
+    if (this.runEnded || this.transitioningRoom) {
       return;
     }
     const body = this.player.body as Phaser.Physics.Arcade.Body;

@@ -9,7 +9,7 @@ export function resetDoors() {
 }
 
 export type DoorSystemOptions = {
-  onDoorOpened?: (door: DoorDefinition) => void;
+  onDoorOpened?: (door: DoorDefinition) => void | Promise<void>;
 };
 
 type DoorInstance = {

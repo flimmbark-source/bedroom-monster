@@ -105,6 +105,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private rageThresholdRatio = MONSTERS.brine_walker.rage.threshold;
   private rageSpeedMultiplier = MONSTERS.brine_walker.rage.speedMultiplier;
   private enraged = false;
+  private miniElite = false;
   private facing: 'up' | 'down' | 'left' | 'right' = 'down';
   private pushSlowTimer = 0;
   private spawnBurstTimer = 0;
@@ -136,6 +137,22 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
   private movementAnimKey(moving: boolean) {
     return `monster-${moving ? 'walk' : 'idle'}-${this.facing}` as const;
+  }
+
+  private configureBodyFromScale() {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined;
+    if (!body) {
+      return;
+    }
+    const monsterScaleX = Math.abs(this.scaleX) || 1;
+    const monsterScaleY = Math.abs(this.scaleY) || 1;
+    const MONSTER_FRAME_WIDTH = 184;
+    const MONSTER_FRAME_HEIGHT = 275;
+    const MONSTER_VISIBLE_TOP = 38;
+    const MONSTER_VISIBLE_BOTTOM = 22;
+    const MONSTER_VISIBLE_HEIGHT = MONSTER_FRAME_HEIGHT - MONSTER_VISIBLE_TOP - MONSTER_VISIBLE_BOTTOM;
+    body.setSize(MONSTER_FRAME_WIDTH / monsterScaleX, MONSTER_VISIBLE_HEIGHT / monsterScaleY);
+    body.setOffset(0, MONSTER_VISIBLE_TOP / monsterScaleY);
   }
 
   private setFacingFromVector(dx: number, dy: number) {
@@ -197,6 +214,21 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.updateFacingFromVelocity();
     this.playMovementAnimation(true);
     this.idleTween?.pause();
+  }
+
+  promoteToMiniElite() {
+    if (this.miniElite) {
+      return;
+    }
+    this.miniElite = true;
+    this.hpMax = Math.round(this.hpMax * 1.5);
+    this.hp = this.hpMax;
+    this.baseMoveSpeed *= 1.2;
+    this.setScale(this.baseScale.x * 1.1, this.baseScale.y * 1.1);
+    this.baseScale = { x: this.scaleX, y: this.scaleY };
+    this.setTint(0xffd27d);
+    this.configureBodyFromScale();
+    this.refreshHpBar();
   }
 
   private scaleAttackDuration(duration: number) {
@@ -956,16 +988,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     this.setScale(0.9);
     this.setTint(this.baseTint);
-    const body = this.body as Phaser.Physics.Arcade.Body;
-    const monsterScaleX = Math.abs(this.scaleX) || 1;
-    const monsterScaleY = Math.abs(this.scaleY) || 1;
-    const MONSTER_FRAME_WIDTH = 184;
-    const MONSTER_FRAME_HEIGHT = 275;
-    const MONSTER_VISIBLE_TOP = 38;
-    const MONSTER_VISIBLE_BOTTOM = 22;
-    const MONSTER_VISIBLE_HEIGHT = MONSTER_FRAME_HEIGHT - MONSTER_VISIBLE_TOP - MONSTER_VISIBLE_BOTTOM;
-    body.setSize(MONSTER_FRAME_WIDTH / monsterScaleX, MONSTER_VISIBLE_HEIGHT / monsterScaleY);
-    body.setOffset(0, MONSTER_VISIBLE_TOP / monsterScaleY);
+    this.configureBodyFromScale();
     this.setCollideWorldBounds(true);
     this.playMovementAnimation(false);
     this.baseScale = { x: this.scaleX, y: this.scaleY };
