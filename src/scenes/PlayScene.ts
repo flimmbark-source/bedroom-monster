@@ -1986,8 +1986,8 @@ export class PlayScene extends Phaser.Scene {
     };
 
     const playerDirections: Record<'up' | 'down' | 'left' | 'right', number> = {
-      up: 0,
-      down: 1,
+      down: 0,
+      up: 1,
       right: 3,
       left: 2,
     };
