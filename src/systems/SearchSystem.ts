@@ -100,6 +100,24 @@ export class SearchSystem {
     this.searchBar.setVisible(false);
   }
 
+  clearFurniture() {
+    for (const furniture of this.furniture) {
+      furniture.emojiLabel.destroy();
+    }
+
+    this.furnitureGroup.children.each((child) => {
+      const rect = child as Phaser.GameObjects.Rectangle;
+      const sprite = rect.getData('spriteRef') as Phaser.GameObjects.Image | null;
+      if (sprite) {
+        sprite.destroy();
+      }
+      rect.setData('spriteRef', null);
+    });
+
+    this.furnitureGroup.clear(true, true);
+    this.furniture = [];
+  }
+
   isSearching() {
     return this.searching;
   }
