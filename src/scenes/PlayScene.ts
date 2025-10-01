@@ -4,6 +4,7 @@ import type { Item } from '@game/types';
 import { ITEM_TEXTURE_PATHS } from '@game/items';
 import { Monster, type TelegraphImpact, type MonsterHitbox } from '@game/monster';
 import { createHUD, drawHUD, type HudElements } from '@ui/hud';
+import { createEndCard, type EndCardElements } from '@ui/endCard';
 import { InputSystem } from '../systems/InputSystem';
 import { InventorySystem, type GroundItem } from '../systems/InventorySystem';
 import { SpawnerSystem } from '../systems/SpawnerSystem';
@@ -17,6 +18,7 @@ export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   monster!: Monster;
   hud!: HudElements;
+  endCard!: EndCardElements;
 
   private hp = PLAYER_BASE.hp;
   private inputSystem!: InputSystem;
@@ -42,6 +44,13 @@ export class PlayScene extends Phaser.Scene {
   private playerBlinkEvent?: Phaser.Time.TimerEvent;
   private playerAnimPausedByHitstop = false;
   private monsterAnimPausedByHitstop = false;
+  private runEnded = false;
+  private runStartAt = 0;
+  private runStats: { damageDealt: number; itemsUsed: number; craftsMade: number } = {
+    damageDealt: 0,
+    itemsUsed: 0,
+    craftsMade: 0,
+  };
   constructor() { super('Play'); }
 
   preload() {
@@ -66,6 +75,10 @@ export class PlayScene extends Phaser.Scene {
   create() {
     this.resetPlayerState();
     this.createAnimations();
+
+    this.runEnded = false;
+    this.runStats = { damageDealt: 0, itemsUsed: 0, craftsMade: 0 };
+    this.runStartAt = this.time.now;
 
     const spawnEmoji: SpawnEmojiFn = (x, y, emoji, fontSize, tint, duration) =>
       this.spawnFloatingEmoji(x, y, emoji, fontSize, tint, duration);
@@ -149,10 +162,7 @@ export class PlayScene extends Phaser.Scene {
       this.inputSystem,
       this.fxDepth,
       spawnEmoji,
-      () => {
-        this.resetPlayerState();
-        this.scene.restart();
-      },
+      () => this.handleRunEnd('victory'),
       (event) => this.handleMonsterDamaged(event),
     );
 
@@ -177,9 +187,11 @@ export class PlayScene extends Phaser.Scene {
     this.player.on('hit', (e: any) => this.damagePlayer(e.dmg || 1));
 
     this.hud = createHUD(this, 5);
+    this.endCard = createEndCard(this);
   }
 
   tryPickup(): boolean {
+    if (this.runEnded) return false;
     if (!this.overItem) return false;
     const success = this.inventorySystem.tryPickup(this.overItem);
     if (success && (!this.overItem.active || !this.physics.overlap(this.player, this.overItem as any))) {
@@ -189,14 +201,21 @@ export class PlayScene extends Phaser.Scene {
   }
 
   drop(slot: 0 | 1) {
+    if (this.runEnded) return;
     this.inventorySystem.drop(slot, this.player.x + 14, this.player.y + 14);
   }
 
   craft() {
-    this.inventorySystem.craft();
+    if (this.runEnded) return;
+    const crafted = this.inventorySystem.craft();
+    if (crafted) {
+      this.runStats.craftsMade += 1;
+      this.refreshHUD();
+    }
   }
 
   private tryShove() {
+    if (this.runEnded) return;
     const now = this.time.now;
     if (now < this.playerShoveCooldownUntil) return;
     const facing = this.inputSystem.getFacing();
@@ -207,6 +226,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   use(slot: 0 | 1) {
+    if (this.runEnded) return;
     const item = this.inventorySystem.getItem(slot);
     if (!item) return;
     const id = item.id;
@@ -257,7 +277,9 @@ export class PlayScene extends Phaser.Scene {
         consumed = false;
     }
     if (consumed) {
+      this.runStats.itemsUsed += 1;
       this.inventorySystem.consume(slot);
+      this.refreshHUD();
     }
   }
 
@@ -346,6 +368,7 @@ export class PlayScene extends Phaser.Scene {
     n: number,
     options: { shake?: { duration: number; intensity: number }; isDot?: boolean } = {},
   ) {
+    if (this.runEnded) return;
     if (n <= 0) return;
     const shake = options.shake ?? { duration: 80, intensity: 0.004 };
     const isDot = Boolean(options.isDot);
@@ -361,10 +384,72 @@ export class PlayScene extends Phaser.Scene {
     }
     this.spawnDamageNumber(this.player.x, this.player.y - 24, n, { isDot });
     this.hp -= n;
+    this.hp = Math.max(this.hp, 0);
+    this.refreshHUD();
     if (this.hp <= 0) {
-      this.resetPlayerState();
-      this.scene.restart();
+      this.handleRunEnd('defeat');
     }
+  }
+
+  private handleRunEnd(outcome: 'defeat' | 'victory') {
+    if (this.runEnded) return;
+    this.runEnded = true;
+    this.endHitstop(true);
+
+    this.searchSystem.endSearch();
+    this.physics.world.pause();
+
+    const playerBody = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+    if (playerBody) {
+      playerBody.setVelocity(0, 0);
+      playerBody.moves = false;
+    }
+    const monsterBody = this.monster.body as Phaser.Physics.Arcade.Body | undefined;
+    if (monsterBody) {
+      monsterBody.setVelocity(0, 0);
+      monsterBody.moves = false;
+    }
+
+    if (this.player.anims?.isPlaying) {
+      this.player.anims.pause();
+    }
+    if (this.monster.anims?.isPlaying) {
+      this.monster.anims.pause();
+    }
+
+    this.refreshHUD();
+
+    const summary = {
+      outcome,
+      timeSurvivedMs: Math.max(this.time.now - this.runStartAt, 0),
+      damageDealt: this.runStats.damageDealt,
+      itemsUsed: this.runStats.itemsUsed,
+      craftsMade: this.runStats.craftsMade,
+    };
+    this.endCard.show(summary);
+
+    this.time.delayedCall(500, () => {
+      if (!this.runEnded) return;
+      this.endCard.showPrompt();
+      this.setupRunRestartHandlers();
+    });
+  }
+
+  private setupRunRestartHandlers() {
+    let handled = false;
+    const restart = () => {
+      if (!this.runEnded || handled) return;
+      handled = true;
+      this.physics.world.resume();
+      this.endCard.hide();
+      this.scene.restart();
+    };
+
+    const keyboard = this.input.keyboard;
+    keyboard?.once('keydown-SPACE', restart);
+    keyboard?.once('keydown-ENTER', restart);
+    keyboard?.once('keydown-R', restart);
+    this.input.once('pointerdown', restart);
   }
 
   private playStubSfx(key: TelegraphSfxKey) {
@@ -378,11 +463,13 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private handleMonsterDamaged(event: MonsterDamageEvent) {
+    if (this.runEnded) return;
     if (!event || event.damage <= 0) return;
     if (!event.isDot) {
       this.startHitstop(Phaser.Math.Between(40, 70));
       this.events.emit('play-sfx', 'thud');
     }
+    this.runStats.damageDealt += event.damage;
   }
 
   private startHitstop(duration: number) {
@@ -627,7 +714,21 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
+  private refreshHUD() {
+    const now = this.time.now;
+    const shoveRemaining = Math.max(this.playerShoveCooldownUntil - now, 0);
+    drawHUD(this.hud, this.hp, PLAYER_BASE.hp, this.inventorySystem.getInventory(), {
+      shoveCooldown: {
+        remainingMs: shoveRemaining,
+        durationMs: this.playerShoveCooldown,
+      },
+    });
+  }
+
   update(time: number, delta: number) {
+    if (this.runEnded) {
+      return;
+    }
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     const now = this.time.now;
     if (this.hitstopActive && now >= this.hitstopUntil) {
@@ -676,13 +777,7 @@ export class PlayScene extends Phaser.Scene {
     const playerAnim = `player-${inputResult.moving ? 'walk' : 'idle'}-${inputResult.facing}` as const;
     this.player.anims.play(playerAnim, true);
 
-    const shoveRemaining = Math.max(this.playerShoveCooldownUntil - now, 0);
-    drawHUD(this.hud, this.hp, PLAYER_BASE.hp, this.inventorySystem.getInventory(), {
-      shoveCooldown: {
-        remainingMs: shoveRemaining,
-        durationMs: this.playerShoveCooldown,
-      },
-    });
+    this.refreshHUD();
     this.searchSystem.updateFurnitureIndicators(this.player);
   }
 
