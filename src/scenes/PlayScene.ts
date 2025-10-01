@@ -371,8 +371,11 @@ export class PlayScene extends Phaser.Scene {
     this.physics.add.collider(furniture, furniture);
 
     // monster
-    this.monster = new Monster(this, 1100, 680);
+    const monsterSpawnX = ROOM_W + 120;
+    const monsterSpawnY = ROOM_H / 2;
+    this.monster = new Monster(this, monsterSpawnX, monsterSpawnY);
     this.monster.setDepth(10);
+    this.monster.startSpawnBurst({ x: -1, y: 0 }, 900, 0.3);
     this.physics.add.collider(
       this.monster,
       furniture,
