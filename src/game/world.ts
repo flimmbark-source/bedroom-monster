@@ -1,4 +1,4 @@
-export type RoomId = 'hallway' | 'infirmary' | 'office' | 'kitchen' | 'entrance';
+export type RoomId = 'bedroom' | 'hallway' | 'infirmary' | 'office' | 'kitchen' | 'entrance';
 
 export type KeyId = 'nurse_badge' | 'admin_badge' | 'pantry_key' | 'front_door_key';
 
@@ -70,6 +70,17 @@ const REQUIREMENTS = {
 
 export const HOUSE_FLOW: RoomFlow[] = [
   {
+    id: 'bedroom',
+    doors: [
+      {
+        id: 'bedroom_hallway',
+        target: 'hallway',
+        sprite: { key: DOOR_SPRITE_ATLAS, frame: 'door_hall' },
+        coords: DOOR_COORDS.north,
+      },
+    ],
+  },
+  {
     id: 'hallway',
     doors: [
       {
@@ -84,6 +95,12 @@ export const HOUSE_FLOW: RoomFlow[] = [
         sprite: { key: DOOR_SPRITE_ATLAS, frame: 'door_office' },
         coords: DOOR_COORDS.right,
         requirement: REQUIREMENTS.nurseBadge,
+      },
+      {
+        id: 'bedroom_hallway',
+        target: 'bedroom',
+        sprite: { key: DOOR_SPRITE_ATLAS, frame: 'door_bedroom' },
+        coords: DOOR_COORDS.south,
       },
     ],
   },

@@ -1,10 +1,27 @@
 import type { ItemId } from '@game/types';
-import type { RoomId } from '@game/world';
+import type { KeyId, RoomId } from '@game/world';
 import type { MonsterId } from '@content/monsters';
 import type { FurnitureLayoutEntry } from '../systems/SearchSystem';
 
-export type Weighted<T> = { id: T; weight: number };
+export type Weighted<T> = readonly [value: T, weight: number];
 export type { RoomId };
+
+export type RoomConfig = {
+  id: RoomId;
+  size: { width: number; height: number };
+  backgroundKey: string;
+  furniture: FurnitureLayoutEntry[];
+  itemPool: {
+    starters: ItemId[];
+    restock: Weighted<ItemId>[];
+  };
+  monsters: Weighted<MonsterId>[];
+  spawns: {
+    restock: SpawnPacing;
+    restockPoints: { x: number; y: number }[];
+  };
+  keysHere: Weighted<KeyId>[];
+};
 
 export type SpawnPacing = {
   restockIntervalMs: number;
@@ -17,31 +34,24 @@ export type RoomSpawns = {
   monsters: Weighted<MonsterId>[];
 };
 
-export type RoomConfig = {
-  id: RoomId;
-  size: { width: number; height: number };
-  background: { key: string };
-  furniture: FurnitureLayoutEntry[];
-  restockPoints: { x: number; y: number }[];
-  starterItems: ItemId[];
-  spawns: RoomSpawns;
-  keyDrops: Weighted<ItemId>[];
-};
-
 export function pickWeightedValue<T>(pool: Weighted<T>[], random: () => number = Math.random): T {
-  const total = pool.reduce((sum, entry) => sum + Math.max(0, entry.weight), 0);
+  const total = pool.reduce((sum, [, weight]) => sum + Math.max(0, weight), 0);
   if (total <= 0) {
     throw new Error('Weighted pool must contain at least one positive weight');
   }
   const roll = random() * total;
   let acc = 0;
-  for (const entry of pool) {
-    acc += Math.max(0, entry.weight);
+  for (const [value, weight] of pool) {
+    acc += Math.max(0, weight);
     if (roll < acc) {
-      return entry.id;
+      return value;
     }
   }
-  return pool[pool.length - 1].id;
+  return pool[pool.length - 1][0];
+}
+
+export function cloneWeightedPool<T>(pool: Weighted<T>[]): Weighted<T>[] {
+  return pool.map(([value, weight]) => [value, weight] as Weighted<T>);
 }
 
 const ROOM_SIZE = { width: 1280, height: 720 } as const;
@@ -55,24 +65,111 @@ const RESTOCK_POINTS = [
   { x: 880, y: 560 },
 ];
 
-const STARTER_ITEMS: ItemId[] = ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'];
+type ItemPoolConfig = RoomConfig['itemPool'];
 
-const RESTOCK_POOL: Weighted<ItemId>[] = [
-  { id: 'knife', weight: 1 },
-  { id: 'bottle', weight: 1 },
-  { id: 'soda', weight: 1 },
-  { id: 'match', weight: 1 },
-  { id: 'bandaid', weight: 1 },
-  { id: 'yoyo', weight: 1 },
-];
+const ROOM_ITEM_POOLS: Record<RoomId, ItemPoolConfig> = {
+  bedroom: {
+    starters: ['knife', 'bottle', 'soda', 'match', 'bandaid', 'yoyo'],
+    restock: [
+      ['knife', 8],
+      ['bottle', 8],
+      ['soda', 6],
+      ['match', 5],
+      ['bandaid', 5],
+      ['yoyo', 4],
+    ],
+  },
+  hallway: {
+    starters: ['knife', 'bottle', 'tacks', 'match'],
+    restock: [
+      ['knife', 6],
+      ['bottle', 5],
+      ['soda', 5],
+      ['match', 4],
+      ['bandaid', 3],
+      ['tacks', 3],
+      ['flashlight', 2],
+    ],
+  },
+  infirmary: {
+    starters: ['bandaid', 'soda', 'sterile_wrap', 'smoke_patch'],
+    restock: [
+      ['bandaid', 6],
+      ['sterile_wrap', 4],
+      ['smoke_patch', 3],
+      ['adrenal_patch', 3],
+      ['soda', 4],
+      ['match', 2],
+    ],
+  },
+  office: {
+    starters: ['knife', 'flashlight', 'tacks', 'bottle'],
+    restock: [
+      ['flashlight', 4],
+      ['tacks', 4],
+      ['glass_shiv', 3],
+      ['smoke_patch', 3],
+      ['adrenal_patch', 2],
+      ['bottle', 3],
+      ['knife', 2],
+    ],
+  },
+  kitchen: {
+    starters: ['bottle', 'soda', 'match', 'knife'],
+    restock: [
+      ['bottle', 5],
+      ['soda', 4],
+      ['match', 3],
+      ['fire_bottle', 3],
+      ['fizz_bomb', 2],
+      ['glass_shiv', 2],
+    ],
+  },
+  entrance: {
+    starters: ['fire_bottle', 'smoke_patch', 'adrenal_patch', 'tacks'],
+    restock: [
+      ['fire_bottle', 4],
+      ['bladed_yoyo', 3],
+      ['glass_shiv', 3],
+      ['smoke_patch', 3],
+      ['adrenal_patch', 3],
+      ['tacks', 2],
+      ['flashlight', 2],
+    ],
+  },
+};
 
-const MONSTER_WEIGHTS: Weighted<MonsterId>[] = [{ id: 'brine_walker', weight: 1 }];
+const ROOM_MONSTER_POOLS: Record<RoomId, Weighted<MonsterId>[]> = {
+  bedroom: [['brine_walker', 1]],
+  hallway: [['brine_walker', 1]],
+  infirmary: [['brine_walker', 1]],
+  office: [['brine_walker', 1]],
+  kitchen: [['brine_walker', 1]],
+  entrance: [['brine_walker', 1]],
+};
 
-const SPAWN_PACING: SpawnPacing = { restockIntervalMs: 15000, restockInitialDelayMs: 15000 };
+const ROOM_SPAWN_PACING: Record<RoomId, SpawnPacing> = {
+  bedroom: { restockIntervalMs: 12000, restockInitialDelayMs: 8000 },
+  hallway: { restockIntervalMs: 15000, restockInitialDelayMs: 15000 },
+  infirmary: { restockIntervalMs: 17000, restockInitialDelayMs: 15000 },
+  office: { restockIntervalMs: 18000, restockInitialDelayMs: 16000 },
+  kitchen: { restockIntervalMs: 20000, restockInitialDelayMs: 16000 },
+  entrance: { restockIntervalMs: 24000, restockInitialDelayMs: 20000 },
+};
 
-const EMPTY_KEY_DROPS: Weighted<ItemId>[] = [];
+const ROOM_KEY_DROPS: Record<RoomId, Weighted<KeyId>[]> = {
+  bedroom: [],
+  hallway: [],
+  infirmary: [['nurse_badge', 1]],
+  office: [['admin_badge', 1]],
+  kitchen: [
+    ['pantry_key', 1],
+    ['front_door_key', 1],
+  ],
+  entrance: [],
+};
 
-const HALLWAY_FURNITURE: FurnitureLayoutEntry[] = [
+const BEDROOM_FURNITURE: FurnitureLayoutEntry[] = [
   {
     x: 330,
     y: 200,
@@ -293,6 +390,10 @@ const HALLWAY_FURNITURE: FurnitureLayoutEntry[] = [
       },
     },
   },
+];
+
+const HALLWAY_FURNITURE: FurnitureLayoutEntry[] = [
+  // TODO: Populate once hallway prop layout is finalized.
 ];
 
 const INFIRMARY_FURNITURE: FurnitureLayoutEntry[] = [
@@ -673,74 +774,100 @@ const ENTRANCE_FURNITURE: FurnitureLayoutEntry[] = [
 ];
 
 export const ROOMS: Record<RoomId, RoomConfig> = {
+  bedroom: {
+    id: 'bedroom',
+    size: { ...ROOM_SIZE },
+    backgroundKey: 'bg_bedroom',
+    furniture: BEDROOM_FURNITURE,
+    itemPool: {
+      starters: [...ROOM_ITEM_POOLS.bedroom.starters],
+      restock: cloneWeightedPool(ROOM_ITEM_POOLS.bedroom.restock),
+    },
+    monsters: cloneWeightedPool(ROOM_MONSTER_POOLS.bedroom),
+    spawns: {
+      restock: { ...ROOM_SPAWN_PACING.bedroom },
+      restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
+    },
+    keysHere: cloneWeightedPool(ROOM_KEY_DROPS.bedroom),
+  },
   hallway: {
     id: 'hallway',
     size: { ...ROOM_SIZE },
-    background: { key: 'bg_hallway' },
+    backgroundKey: 'bg_hallway',
     furniture: HALLWAY_FURNITURE,
-    restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
-    starterItems: [...STARTER_ITEMS],
-    spawns: {
-      restock: { ...SPAWN_PACING },
-      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
-      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    itemPool: {
+      starters: [...ROOM_ITEM_POOLS.hallway.starters],
+      restock: cloneWeightedPool(ROOM_ITEM_POOLS.hallway.restock),
     },
-    keyDrops: [...EMPTY_KEY_DROPS],
+    monsters: cloneWeightedPool(ROOM_MONSTER_POOLS.hallway),
+    spawns: {
+      restock: { ...ROOM_SPAWN_PACING.hallway },
+      restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
+    },
+    keysHere: cloneWeightedPool(ROOM_KEY_DROPS.hallway),
   },
   infirmary: {
     id: 'infirmary',
     size: { ...ROOM_SIZE },
-    background: { key: 'bg_infirmary' },
+    backgroundKey: 'bg_infirmary',
     furniture: INFIRMARY_FURNITURE,
-    restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
-    starterItems: [...STARTER_ITEMS],
-    spawns: {
-      restock: { ...SPAWN_PACING },
-      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
-      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    itemPool: {
+      starters: [...ROOM_ITEM_POOLS.infirmary.starters],
+      restock: cloneWeightedPool(ROOM_ITEM_POOLS.infirmary.restock),
     },
-    keyDrops: [...EMPTY_KEY_DROPS],
+    monsters: cloneWeightedPool(ROOM_MONSTER_POOLS.infirmary),
+    spawns: {
+      restock: { ...ROOM_SPAWN_PACING.infirmary },
+      restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
+    },
+    keysHere: cloneWeightedPool(ROOM_KEY_DROPS.infirmary),
   },
   office: {
     id: 'office',
     size: { ...ROOM_SIZE },
-    background: { key: 'bg_office' },
+    backgroundKey: 'bg_office',
     furniture: OFFICE_FURNITURE,
-    restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
-    starterItems: [...STARTER_ITEMS],
-    spawns: {
-      restock: { ...SPAWN_PACING },
-      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
-      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    itemPool: {
+      starters: [...ROOM_ITEM_POOLS.office.starters],
+      restock: cloneWeightedPool(ROOM_ITEM_POOLS.office.restock),
     },
-    keyDrops: [...EMPTY_KEY_DROPS],
+    monsters: cloneWeightedPool(ROOM_MONSTER_POOLS.office),
+    spawns: {
+      restock: { ...ROOM_SPAWN_PACING.office },
+      restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
+    },
+    keysHere: cloneWeightedPool(ROOM_KEY_DROPS.office),
   },
   kitchen: {
     id: 'kitchen',
     size: { ...ROOM_SIZE },
-    background: { key: 'bg_kitchen' },
+    backgroundKey: 'bg_kitchen',
     furniture: KITCHEN_FURNITURE,
-    restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
-    starterItems: [...STARTER_ITEMS],
-    spawns: {
-      restock: { ...SPAWN_PACING },
-      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
-      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    itemPool: {
+      starters: [...ROOM_ITEM_POOLS.kitchen.starters],
+      restock: cloneWeightedPool(ROOM_ITEM_POOLS.kitchen.restock),
     },
-    keyDrops: [...EMPTY_KEY_DROPS],
+    monsters: cloneWeightedPool(ROOM_MONSTER_POOLS.kitchen),
+    spawns: {
+      restock: { ...ROOM_SPAWN_PACING.kitchen },
+      restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
+    },
+    keysHere: cloneWeightedPool(ROOM_KEY_DROPS.kitchen),
   },
   entrance: {
     id: 'entrance',
     size: { ...ROOM_SIZE },
-    background: { key: 'bg_entrance' },
+    backgroundKey: 'bg_entrance',
     furniture: ENTRANCE_FURNITURE,
-    restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
-    starterItems: [...STARTER_ITEMS],
-    spawns: {
-      restock: { ...SPAWN_PACING },
-      items: RESTOCK_POOL.map((entry) => ({ ...entry })),
-      monsters: MONSTER_WEIGHTS.map((entry) => ({ ...entry })),
+    itemPool: {
+      starters: [...ROOM_ITEM_POOLS.entrance.starters],
+      restock: cloneWeightedPool(ROOM_ITEM_POOLS.entrance.restock),
     },
-    keyDrops: [...EMPTY_KEY_DROPS],
+    monsters: cloneWeightedPool(ROOM_MONSTER_POOLS.entrance),
+    spawns: {
+      restock: { ...ROOM_SPAWN_PACING.entrance },
+      restockPoints: RESTOCK_POINTS.map((point) => ({ ...point })),
+    },
+    keysHere: cloneWeightedPool(ROOM_KEY_DROPS.entrance),
   },
 };

@@ -15,10 +15,10 @@ import { SearchSystem, type SpawnEmojiFn } from '../systems/SearchSystem';
 import { TelegraphSystem, type MonsterDamageEvent } from '../systems/TelegraphSystem';
 
 type TelegraphSfxKey = 'whoosh' | 'rise' | 'crack' | 'thud';
-import { pickWeightedValue } from '@content/rooms';
+import { cloneWeightedPool, pickWeightedValue } from '@content/rooms';
 import { RoomLoader, type LoadedRoom } from './RoomLoader';
 
-const DEFAULT_ROOM_ID: RoomId = 'hallway';
+const DEFAULT_ROOM_ID: RoomId = 'bedroom';
 
 export class PlayScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
@@ -66,6 +66,7 @@ export class PlayScene extends Phaser.Scene {
   constructor() { super('Play'); }
 
   preload() {
+    this.load.image('bg_bedroom', 'assets/sprites/background.png');
     this.load.image('bg_hallway', 'assets/bg_hallway.png');
     this.load.image('bg_infirmary', 'assets/bg_infirmary.png');
     this.load.image('bg_office', 'assets/bg_office.png');
@@ -208,7 +209,7 @@ export class PlayScene extends Phaser.Scene {
       this,
       this.inventorySystem,
       this.roomState.restockPoints.map((point) => ({ ...point })),
-      this.roomState.spawns.items.map((entry) => ({ ...entry })),
+      cloneWeightedPool(this.roomState.spawns.items),
     );
     this.spawnerSystem.spawnInitialItems([...this.roomState.starterItems]);
     this.spawnerSystem.scheduleRestock(this.roomState.spawns.restock);
