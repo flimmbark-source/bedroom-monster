@@ -12,25 +12,25 @@ const KEY_METADATA: Record<KeyId, KeyMetadata> = {
   nurse_badge: {
     id: 'nurse_badge',
     label: 'Nurse Badge',
-    shortLabel: 'NB',
+    shortLabel: 'Med',
     color: 0x7dd6ff,
   },
   admin_badge: {
     id: 'admin_badge',
     label: 'Admin Badge',
-    shortLabel: 'AB',
+    shortLabel: 'Admin',
     color: 0xffcf73,
   },
   pantry_key: {
     id: 'pantry_key',
     label: 'Pantry Key',
-    shortLabel: 'PK',
+    shortLabel: 'Hall',
     color: 0xe88f52,
   },
   front_door_key: {
     id: 'front_door_key',
     label: 'Front Door Key',
-    shortLabel: 'FD',
+    shortLabel: 'Exit',
     color: 0xa0e076,
   },
 };
