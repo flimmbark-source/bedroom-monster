@@ -10,6 +10,11 @@ import {
 import type { SpawnEmojiFn } from './SearchSystem';
 import { InputSystem } from './InputSystem';
 
+export type MonsterDamageEvent = {
+  damage: number;
+  isDot: boolean;
+};
+
 export class TelegraphSystem {
   constructor(
     private readonly scene: Phaser.Scene,
@@ -19,6 +24,7 @@ export class TelegraphSystem {
     private readonly fxDepth: number,
     private readonly spawnFloatingEmoji: SpawnEmojiFn,
     private readonly onMonsterDefeated: () => void,
+    private readonly onMonsterDamaged?: (event: MonsterDamageEvent) => void,
   ) {}
 
   getAimAngle() {
@@ -109,27 +115,65 @@ export class TelegraphSystem {
     return this.getMonsterHitboxes().filter((hitbox) => this.rectIntersectsPolygon(hitbox.rect, polygon));
   }
 
-  hitMonster(baseDamage: number, emoji: string = '💥', hitboxes: MonsterHitbox[] = []) {
+  private spawnDamageNumber(x: number, y: number, damage: number, isDot: boolean) {
+    const label = this.scene.add
+      .text(x, y, `${Math.round(damage)}`, {
+        fontSize: '14px',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(this.fxDepth + 3)
+      .setScale(0.9);
+
+    label.setTint(isDot ? 0xffc56f : 0xfff4d3);
+
+    this.scene.tweens.add({
+      targets: label,
+      y: y - 22,
+      alpha: { from: 1, to: 0 },
+      duration: isDot ? 500 : 360,
+      ease: 'Sine.easeOut',
+      onComplete: () => label.destroy(),
+    });
+  }
+
+  hitMonster(
+    baseDamage: number,
+    emoji: string = '💥',
+    hitboxes: MonsterHitbox[] = [],
+    options: { isDot?: boolean } = {},
+  ) {
     const impacted = hitboxes.length ? hitboxes : this.getMonsterHitboxes();
-    if (!impacted.length) return;
+    if (!impacted.length) return 0;
     const multiplier = impacted
       .map((hitbox) => hitbox.damageMultiplier ?? 1)
       .reduce((max, value) => Math.max(max, value), 0);
     if (multiplier <= 0) {
-      return;
+      return 0;
     }
     const damage = Math.max(0, baseDamage * multiplier);
     if (damage <= 0) {
-      return;
+      return 0;
     }
+    const isDot = Boolean(options.isDot);
     this.monster.hp -= damage;
     this.monster.refreshHpBar();
     this.monster.setTint(0xffdddd);
     this.scene.time.delayedCall(80, () => this.monster.clearTint());
-    this.spawnFloatingEmoji(this.monster.x, this.monster.y - 30, emoji, 26, 0xfff4d3);
+    const numberY = this.monster.y - this.monster.displayHeight * 0.35;
+    this.spawnDamageNumber(this.monster.x, numberY, damage, isDot);
+    this.spawnFloatingEmoji(
+      this.monster.x,
+      this.monster.y - 30,
+      emoji,
+      26,
+      isDot ? 0xffd18a : 0xfff4d3,
+    );
+    this.onMonsterDamaged?.({ damage, isDot });
     if (this.monster.hp <= 0) {
       this.onMonsterDefeated();
     }
+    return damage;
   }
 
   showMeleeTelegraph(range: number, color: number, emoji: string, duration = 300) {

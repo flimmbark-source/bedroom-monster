@@ -79,7 +79,10 @@ export class InputSystem {
     const body = player.body as Phaser.Physics.Arcade.Body;
 
     if (options.knockbackActive) {
-      body.velocity.scale(0.9);
+      body.velocity.scale(0.82);
+      if (body.velocity.lengthSq() < 36) {
+        body.setVelocity(0, 0);
+      }
     } else {
       body.setVelocity(0, 0);
     }
