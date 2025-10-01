@@ -89,6 +89,7 @@ export class PlayScene extends Phaser.Scene {
     });
 
     this.load.atlas('furniture', 'assets/furniture_sheet.png', 'assets/furniture_atlas.json');
+    this.load.atlas('furniture_old', 'assets/sprites/furniture.png', 'assets/sprites/furniture.json');
     this.load.atlas('doors_windows', 'assets/doors_windows_sheet.png', 'assets/doors_windows_atlas.json');
 
     Object.entries(ITEM_ICON_SOURCES).forEach(([key, source]) => {

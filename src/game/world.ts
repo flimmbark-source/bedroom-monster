@@ -71,14 +71,7 @@ const REQUIREMENTS = {
 export const HOUSE_FLOW: RoomFlow[] = [
   {
     id: 'bedroom',
-    doors: [
-      {
-        id: 'bedroom_hallway',
-        target: 'hallway',
-        sprite: { key: DOOR_SPRITE_ATLAS, frame: 'door_hall' },
-        coords: DOOR_COORDS.north,
-      },
-    ],
+    doors: [],
   },
   {
     id: 'hallway',
@@ -95,12 +88,6 @@ export const HOUSE_FLOW: RoomFlow[] = [
         sprite: { key: DOOR_SPRITE_ATLAS, frame: 'door_office' },
         coords: DOOR_COORDS.right,
         requirement: REQUIREMENTS.nurseBadge,
-      },
-      {
-        id: 'bedroom_hallway',
-        target: 'bedroom',
-        sprite: { key: DOOR_SPRITE_ATLAS, frame: 'door_bedroom' },
-        coords: DOOR_COORDS.south,
       },
     ],
   },
