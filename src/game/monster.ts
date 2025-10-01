@@ -147,6 +147,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     if (!body) {
       return;
     }
+
     const { width: frameWidth, height: frameHeight } = this.spriteConfig.frame;
     const { visibleTop, visibleBottom } = this.spriteConfig.collision;
     const visibleHeight = frameHeight - visibleTop - visibleBottom;
@@ -159,6 +160,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
 
     body.setSize(bodyWidth, bodyHeight);
     body.setOffset(offsetX, offsetY);
+
   }
 
   private setFacingFromVector(dx: number, dy: number) {
