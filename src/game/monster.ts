@@ -106,6 +106,9 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private pushSlowTimer = 0;
   private spawnBurstTimer = 0;
   private lastMoveIntent = new Phaser.Math.Vector2(0, 0);
+  private walkStretchActive = false;
+  private readonly walkStretchEnterSpeed = 60;
+  private readonly walkStretchExitSpeed = 25;
   private hitboxDefs: MonsterHitboxDefinition[] = [
     {
       id: 'core',
@@ -974,12 +977,21 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     // maintain a gentle sway while walking unless a telegraph is running.
     if (!this.actionLock) {
       const speed = body.velocity.length() || 0;
-      if (speed > 40) {
-        this.idleTween?.pause();
-        this.setScale(1.05, 0.95);
-      } else if (!this.currentChain) {
-        this.resetPose();
-        this.idleTween?.resume();
+      if (speed > this.walkStretchEnterSpeed) {
+        if (!this.walkStretchActive) {
+          this.walkStretchActive = true;
+          this.idleTween?.pause();
+        }
+        this.setWalkingStretchScale();
+      } else if (speed < this.walkStretchExitSpeed) {
+        if (this.walkStretchActive) {
+          this.walkStretchActive = false;
+          this.resetPose();
+          this.idleTween?.resume();
+        } else if (!this.currentChain) {
+          this.resetPose();
+          this.idleTween?.resume();
+        }
       }
     }
 
@@ -1112,6 +1124,11 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
     this.setAngle(this.baseAngle);
     this.setTint(this.baseTint);
     this.playMovementAnimation(false);
+    this.walkStretchActive = false;
+  }
+
+  private setWalkingStretchScale() {
+    this.setScale(this.baseScale.x * 1.05, this.baseScale.y * 0.95);
   }
 
   applyPushSlow(duration = 0.3) {
