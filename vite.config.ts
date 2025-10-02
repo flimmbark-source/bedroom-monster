@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       '@content': fileURLToPath(new URL('./src/content', import.meta.url)),
       '@game': fileURLToPath(new URL('./src/game', import.meta.url)),
+      '@monsters': fileURLToPath(new URL('./src/monsters', import.meta.url)),
       '@scenes': fileURLToPath(new URL('./src/scenes', import.meta.url)),
       '@ui': fileURLToPath(new URL('./src/ui', import.meta.url)),
     },

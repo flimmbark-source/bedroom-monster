@@ -15,6 +15,7 @@
     "paths": {
       "@content/*": ["src/content/*"],
       "@game/*": ["src/game/*"],
+      "@monsters/*": ["src/monsters/*"],
       "@scenes/*": ["src/scenes/*"],
       "@ui/*": ["src/ui/*"]
     }
