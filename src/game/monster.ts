@@ -123,6 +123,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   private burningUntil = 0;
   private hurtbox: MonsterHurtbox;
   private hurtState: MonsterStateTag = 'idle';
+  private hurtStateElapsed = 0;
   private lastPose: MonsterPose;
   private hitboxDefs: MonsterHitboxDefinition[] = [
     { id: 'core', part: 'core', damageMultiplier: 1 },
@@ -215,6 +216,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
       return;
     }
     this.hurtState = state;
+    this.hurtStateElapsed = 0;
     this.updateHurtbox(state);
   }
 
@@ -383,6 +385,25 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
         damageMultiplier,
       };
     });
+  }
+
+  protected getCurrentPose(): MonsterPose {
+    if (!this.lastPose) {
+      this.lastPose = this.buildPose();
+    }
+    return this.lastPose;
+  }
+
+  protected getCurrentHurtState(): MonsterStateTag {
+    return this.hurtState;
+  }
+
+  protected getHurtStateElapsed(): number {
+    return this.hurtStateElapsed;
+  }
+
+  protected getHitboxDefinitions(): MonsterHitboxDefinition[] {
+    return this.hitboxDefs;
   }
 
   resolveTelegraphHit(id: string) {
@@ -1097,6 +1118,7 @@ export class Monster extends Phaser.Physics.Arcade.Sprite {
   }
 
   update(dt: number, player: Phaser.Physics.Arcade.Sprite) {
+    this.hurtStateElapsed += dt;
     this.layoutHpBar();
     this.updateRageState();
     this.updateHurtbox();
