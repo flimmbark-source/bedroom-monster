@@ -1,6 +1,12 @@
 import Phaser from 'phaser';
 import { MONSTER_SPRITES, type MonsterSpriteDefinition } from '@content/monsterSprites';
-import { MONSTERS, type MonsterDefinition, type MonsterId, type Move, type MoveId } from '@content/monsters';
+import {
+  LEGACY_MONSTERS as MONSTERS,
+  type LegacyMonsterDefinition as MonsterDefinition,
+  type MonsterId,
+  type Move,
+  type MoveId,
+} from '@content/monstersLegacy';
 import { MonsterHurtbox, type MonsterPose, type MonsterStateTag, type HurtboxShapeInstance } from '../combat/monsterHurtbox';
 import { getShapeBounds } from '../combat/shapes';
 const TELEGRAPH_COLORS = {
