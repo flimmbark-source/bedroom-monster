@@ -13,6 +13,8 @@ import { InventorySystem, type GroundItem } from '../systems/InventorySystem';
 import { SpawnerSystem } from '../systems/SpawnerSystem';
 import { SearchSystem, type SpawnEmojiFn } from '../systems/SearchSystem';
 import { TelegraphSystem, type MonsterDamageEvent } from '../systems/TelegraphSystem';
+import { HitboxManager } from '../combat/hitboxManager';
+import { BrineWalker } from '@monsters/brine_walker';
 
 type TelegraphSfxKey = 'whoosh' | 'rise' | 'crack' | 'thud';
 import { cloneWeightedPool, pickWeightedValue } from '@content/rooms';
@@ -63,6 +65,7 @@ export class PlayScene extends Phaser.Scene {
   private transitioningRoom = false;
   private monsterFurnitureCollider?: Phaser.Physics.Arcade.Collider;
   private spawnEmojiFn!: SpawnEmojiFn;
+  private hitboxManager!: HitboxManager;
   constructor() { super('Play'); }
 
   preload() {
@@ -75,6 +78,10 @@ export class PlayScene extends Phaser.Scene {
     this.load.spritesheet('player', 'assets/sprites/player.png', {
       frameWidth: 102,
       frameHeight: 152,
+    });
+    this.load.spritesheet('brine_walker', 'assets/Crab_Bulwark.png', {
+      frameWidth: 256,
+      frameHeight: 256,
     });
     const monsterSpriteConfigs = new Map(
       Object.values(MONSTER_SPRITES).map((sprite) => [sprite.textureKey, sprite]),
@@ -111,6 +118,7 @@ export class PlayScene extends Phaser.Scene {
 
     this.resetPlayerState();
     this.createAnimations();
+    this.hitboxManager = new HitboxManager();
 
     this.runEnded = false;
     this.runStats = { damageDealt: 0, itemsUsed: 0, craftsMade: 0 };
@@ -220,6 +228,7 @@ export class PlayScene extends Phaser.Scene {
     this.monster?.destroy();
     this.monsterFurnitureCollider?.destroy();
     this.monsterFurnitureCollider = undefined;
+    this.hitboxManager?.clear('monsters');
 
     const { width: roomWidth, height: roomHeight } = this.roomState.size;
     const monsterSpawnX = roomWidth + 120;
@@ -230,7 +239,11 @@ export class PlayScene extends Phaser.Scene {
     );
     const isMiniElite = Phaser.Math.FloatBetween(0, 1) < 0.2;
 
-    this.monster = new Monster(this, monsterSpawnX, monsterSpawnY, monsterId);
+    if (monsterId === 'brine_walker') {
+      this.monster = new BrineWalker(this, monsterSpawnX, monsterSpawnY, this.hitboxManager);
+    } else {
+      this.monster = new Monster(this, monsterSpawnX, monsterSpawnY, monsterId);
+    }
     if (isMiniElite) {
       this.monster.promoteToMiniElite();
     }
@@ -243,6 +256,7 @@ export class PlayScene extends Phaser.Scene {
       undefined,
       this.searchSystem,
     );
+    this.syncMonsterHurtboxes();
   }
 
   tryPickup(): boolean {
@@ -794,6 +808,7 @@ export class PlayScene extends Phaser.Scene {
     this.monster?.destroy();
     this.monsterFurnitureCollider?.destroy();
     this.monsterFurnitureCollider = undefined;
+    this.hitboxManager?.clear('monsters');
 
     const nextRoom = await this.roomLoader.transitionTo(door.target);
     this.roomState = nextRoom;
@@ -832,11 +847,57 @@ export class PlayScene extends Phaser.Scene {
     });
   }
 
+  private syncPlayerHurtbox() {
+    if (!this.hitboxManager) {
+      return;
+    }
+    const body = this.player.body as Phaser.Physics.Arcade.Body | undefined;
+    let centerX = this.player.x;
+    let centerY = this.player.y;
+    let radius = Math.max(this.player.displayWidth, this.player.displayHeight) * 0.25;
+    if (body) {
+      centerX = body.x + body.width * 0.5;
+      centerY = body.y + body.height * 0.5;
+      radius = Math.max(body.width, body.height) * 0.5;
+    }
+    const clampedRadius = Math.max(radius, 18);
+    this.hitboxManager.registerHurtboxes('player', 'player', [
+      {
+        id: 'player-core',
+        shape: { kind: 'circle', x: centerX, y: centerY, r: clampedRadius },
+        data: { body },
+      },
+    ]);
+  }
+
+  private syncMonsterHurtboxes() {
+    if (!this.hitboxManager || !this.monster) {
+      return;
+    }
+    const maybeSyncable = this.monster as Monster & { syncHitboxes?: () => void };
+    if (maybeSyncable.syncHitboxes) {
+      maybeSyncable.syncHitboxes();
+      return;
+    }
+    const hitboxes = this.monster.getHitboxes();
+    this.hitboxManager.registerHurtboxes(
+      'monsters',
+      'monster',
+      hitboxes.map((hitbox) => ({
+        id: hitbox.id,
+        shape: hitbox.shape,
+        data: hitbox,
+      })),
+    );
+  }
+
   update(time: number, delta: number) {
     this.doorSystem?.update();
     if (this.runEnded || this.transitioningRoom) {
       return;
     }
+    this.hitboxManager?.clear();
+    this.syncPlayerHurtbox();
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     const now = this.time.now;
     if (this.hitstopActive && now >= this.hitstopUntil) {
@@ -876,6 +937,7 @@ export class PlayScene extends Phaser.Scene {
     if (!hitstopActive) {
       this.monster.update(delta / 1000, this.player);
     }
+    this.syncMonsterHurtboxes();
     this.playerIFrameUntil = this.telegraphSystem.resolveTelegraphCollisions(
       now,
       this.playerIFrameUntil,
@@ -944,6 +1006,25 @@ export class PlayScene extends Phaser.Scene {
           repeat: -1,
         });
       });
+    });
+
+    ensureAnimation('brine_walker-idle', {
+      key: 'brine_walker-idle',
+      frames: this.anims.generateFrameNumbers('brine_walker', { start: 0, end: 3 }),
+      frameRate: 6,
+      repeat: -1,
+    });
+    ensureAnimation('brine_walker-walk', {
+      key: 'brine_walker-walk',
+      frames: this.anims.generateFrameNumbers('brine_walker', { start: 4, end: 7 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+    ensureAnimation('brine_walker-attack', {
+      key: 'brine_walker-attack',
+      frames: this.anims.generateFrameNumbers('brine_walker', { start: 8, end: 11 }),
+      frameRate: 12,
+      repeat: 0,
     });
   }
 }
