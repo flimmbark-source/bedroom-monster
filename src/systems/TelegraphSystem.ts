@@ -9,6 +9,7 @@ import {
 
 import type { SpawnEmojiFn } from './SearchSystem';
 import { InputSystem } from './InputSystem';
+import { HitboxManager } from '../combat/hitboxManager';
 
 export type MonsterDamageEvent = {
   damage: number;
@@ -20,6 +21,7 @@ export class TelegraphSystem {
     private readonly scene: Phaser.Scene,
     private readonly player: Phaser.Physics.Arcade.Sprite,
     private readonly monster: Monster,
+    private readonly hitboxManager: HitboxManager,
     private readonly input: InputSystem,
     private readonly fxDepth: number,
     private readonly spawnFloatingEmoji: SpawnEmojiFn,
@@ -75,7 +77,10 @@ export class TelegraphSystem {
   }
 
   getMonsterHitboxes() {
-    return this.monster.getHitboxes();
+    return this.hitboxManager
+      .getHurtboxes('monsters')
+      .map((entry) => entry.data)
+      .filter((data): data is MonsterHitbox => Boolean(data));
   }
 
   getMonsterHitboxesWithinArc(range: number, halfAngle: number) {
